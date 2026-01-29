@@ -10,10 +10,10 @@ namespace plt = matplotlibcpp;
 
 int main() {
     // Parameters ffor Brownian motion stock price simulation
-    int points = 256; // Nice computer science number 256
+    int points = 510; // 510 minutes in a trading day (8:00 to 16:30)
     double S0 = 500.0;  // Initial stock price (we can adjust this as needed)
     double mu = 0.05;   // Drift
-    double sigma = 0.5; // Volatility
+    double sigma = 0.4; // Volatility
     double sentiment = 5.0; // Market sentiment (we can alter this to affect price spikes)
     
     // Trading hours: 8:00 AM to 16:30 (4:30 PM) = 8.5 hours per day
