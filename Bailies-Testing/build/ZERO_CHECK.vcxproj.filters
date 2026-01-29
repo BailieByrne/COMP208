@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\pudma\Desktop\208\COMP208\Bailies-Testing\build\CMakeFiles\8677e0c45b0a4463720d65ec1ca88e80\generate.stamp.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{BCD864BA-9485-3F01-A1BA-E932591E9422}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
