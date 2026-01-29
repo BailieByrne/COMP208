@@ -1,3 +1,0 @@
-C:/Users/pudma/Desktop/208/COMP208/Bailies-Testing/build/CMakeFiles/stock_sim.dir
-C:/Users/pudma/Desktop/208/COMP208/Bailies-Testing/build/CMakeFiles/ALL_BUILD.dir
-C:/Users/pudma/Desktop/208/COMP208/Bailies-Testing/build/CMakeFiles/ZERO_CHECK.dir
