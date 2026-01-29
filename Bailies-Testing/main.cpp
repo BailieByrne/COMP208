@@ -4,7 +4,7 @@
 #include <random>
 #include <sstream>
 #include <iomanip>
-#include "deps/matplotlibcpp.h"
+#include "deps/matplot/matplotlibcpp.h"
 
 namespace plt = matplotlibcpp;
 
