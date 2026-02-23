@@ -100,9 +100,13 @@ endif()
 # Include directories
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/Deps/matplot
     ${Python3_INCLUDE_DIRS}
     ${NUMPY_INCLUDE_DIR}
 )
+
+# Set output directory for executables
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 # Suppress compiler warnings
 if(MSVC)
@@ -111,8 +115,8 @@ elseif(APPLE OR UNIX)
     add_compile_options(-Wno-deprecated-declarations -Wno-conversion)
 endif()
 
-# Add executable
-add_executable(stock_sim main.cpp)
+# Add executable from Backend folder
+add_executable(stock_sim Backend/main.cpp)
 
 # Link Python library
 target_link_libraries(stock_sim ${Python3_LIBRARIES})
@@ -125,7 +129,7 @@ add_custom_command(TARGET stock_sim POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E echo "===================="
     COMMAND ${CMAKE_COMMAND} -E echo ""
     COMMAND ${CMAKE_COMMAND} -E echo "Run the executable:"
-    COMMAND ${CMAKE_COMMAND} -E echo "./Release/stock_sim (Windows: .exe || macOS: .out)"
+    COMMAND ${CMAKE_COMMAND} -E echo "./bin/stock_sim (Windows: .exe || macOS: .out)"
 )
 
 # Print configuration info

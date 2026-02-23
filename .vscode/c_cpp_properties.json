@@ -8,7 +8,8 @@
                 "C:/Python312/Include",
                 "C:/Python312/Include/**",
                 "C:/Users/pudma/AppData/Roaming/Python/Python312/site-packages/numpy/core/include",
-                "${vcpkgRoot}/x64-windows/include"
+                "${vcpkgRoot}/x64-windows/include",
+                "${workspaceFolder}/Deps/matplot/matplotlibcpp.h",
             ],
             "defines": [
                 "_DEBUG",

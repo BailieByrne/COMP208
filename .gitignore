@@ -1,1 +1,3 @@
-*/build
+**/build
+**/CMakeFiles
+**/stock_prices.csv
