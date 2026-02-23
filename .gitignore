@@ -1,3 +1,4 @@
 **/build
 **/CMakeFiles
 **/stock_prices.csv
+**/predicted_prices.csv

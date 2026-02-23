@@ -6,11 +6,12 @@
 #include <fstream>
 #include <string>
 #include <iomanip>
+#include "AI.cpp"
 
 
 int main() {
     // Parameters for Brownian motion stock price simulation
-    int points = 510; // 510 minutes in a trading day (8:00 to 16:30)
+    const int points = 510; // 510 minutes in a trading day (8:00 to 16:30)
     double S0 = 500.0;  // Initial stock price
     double mu = 0.05;   // Drift
     double sigma = 0.4; // Volatility
@@ -47,6 +48,11 @@ int main() {
     }
     
     csv_file.close();
+
+    //Create the AI and have it predict the graph
+    //Change prices.back() we need to ccheck if it already has the final price first
+    //duplicate endpoints cook the model
+    AI ai(S0, mu, sigma, sentiment, "PLACEHOLDER", 1, prices.back());
 
     return 0;
 }
