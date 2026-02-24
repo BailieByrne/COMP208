@@ -1,0 +1,12 @@
+{
+    "User": {
+        "username": "Player1",
+        "score": 0
+    },
+    
+    "Settings": {
+        "fullscreen": false,
+        "lightmode": true,
+        "volume": 50
+    }
+}
