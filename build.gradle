@@ -1,0 +1,47 @@
+plugins {
+    id 'java'
+    id 'org.openjfx.javafxplugin' version '0.1.0'
+}
+
+group = 'com.stock'
+version = '1.0'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+wrapper {
+    gradleVersion = '8.11'
+}
+
+repositories {
+    flatDir {
+        dirs 'Deps/javafx-sdk-17.0.18/lib'
+    }
+}
+
+javafx {
+    version = "17.0.18"
+    modules = ['javafx.controls', 'javafx.fxml', 'javafx.graphics']
+}
+
+dependencies {
+    // Using local JavaFX SDK from Deps folder
+    implementation fileTree(dir: 'Deps/javafx-sdk-17.0.18/lib', include: '*.jar')
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs = ['Backend/Server', 'UI']
+        }
+        resources {
+            srcDirs = ['Backend/Server', 'UI']
+        }
+    }
+}
+
+tasks.named('compileJava') {
+    options.encoding = 'UTF-8'
+}

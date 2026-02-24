@@ -52,7 +52,7 @@ int main() {
     //Create the AI and have it predict the graph
     //Change prices.back() we need to ccheck if it already has the final price first
     //duplicate endpoints cook the model
-    AI ai(S0, mu, sigma, sentiment, "PLACEHOLDER", 1, prices.back());
+    AI ai(S0, mu, sigma, sentiment, "PLACEHOLDER", 4, prices.back());
 
     return 0;
 }
