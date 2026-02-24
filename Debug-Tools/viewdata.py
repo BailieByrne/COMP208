@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 # Read the CSV file
 df = pd.read_csv('stock_prices.csv')
-step_size = 5
+step_size = 1
 #Change step size 1 shows full picture
 #5 shows every 5th point (default to the player)
 

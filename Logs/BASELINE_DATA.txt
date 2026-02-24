@@ -1,0 +1,59 @@
+PERFORMANCE AND ACCURACY BASELINE DATA
+Compiled: February 24, 2026
+=====================================
+
+1. INITIAL PROFILER RESULTS (500 runs of stock_sim.exe)
+=====================================================
+Total Runs: 500
+Total Time: 11,361ms
+Average Execution Time: 23ms
+Minimum Execution Time: 17ms
+Maximum Execution Time: 63ms
+Range: 46ms
+Notes: Baseline performance without Monte Carlo optimization
+
+2. BATCH ERROR DETECTION - WITHOUT MONTE CARLO (Single path)
+===========================================================
+Total Trials: 500
+Average L2 Error: 356.0064
+Min L2 Error: 170.9839
+Max L2 Error: 677.5390
+Standard Deviation: 86.9805
+Notes: Single-path predictions for comparison
+
+3. BATCH ERROR DETECTION - MONTE CARLO (500 simulations per run)
+===============================================================
+Total Trials: 500
+Average L2 Error: 332.0830
+Min L2 Error: 169.9228
+Max L2 Error: 817.3169
+Standard Deviation: 86.3680
+Notes: Monte Carlo using 500 internal runs per prediction
+
+4. BATCH ERROR DETECTION - THREADED MONTE CARLO
+===============================================
+Total Trials: 500
+Average L2 Error: 247.8641
+Min L2 Error: 123.3442
+Max L2 Error: 520.3300
+Standard Deviation: 64.0166
+Notes: Threaded Monte Carlo with shared mean path update
+
+5. COMPARISON ANALYSIS
+Threaded Monte Carlo significantly improves predictive performance.
+Accuracy Gains:
+L2 Error Reduction: 108.14 points
+Percentage Improvement: 30.37%
+Stability Gains:
+Std Dev Reduction: 22.96 points
+Variance Reduction: 26.4%
+
+Note to self i think there was an issue with the random gen being reused so bias crept in,
+since threading i have removes this shared generator and that may have attributed to the accuracy increase.
+
+6. VISUALIZATION
+===============
+Model predictions track actual stock prices well visually despite
+numerical L2 errors. Predictions follow trends and volatility accurately.
+
+

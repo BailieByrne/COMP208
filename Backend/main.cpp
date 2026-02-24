@@ -39,7 +39,7 @@ int main() {
     csv_file << "Time,Ticker,Price\n";
     csv_file << "0,STOCK," << S0 << "\n"; // Write initial price
 
-    //Loops through the points to generate the stock prices using the GBM formula with lto correction
+    //Loops through the points to generate the stock prices using the GBM formula with ito correction
     for (int i = 1; i < points; ++i) {
         double Z = dis(gen);
         double price = prices[i - 1] * std::exp(drift + vol_sqrt_dt * Z);
@@ -50,9 +50,7 @@ int main() {
     csv_file.close();
 
     //Create the AI and have it predict the graph
-    //Change prices.back() we need to ccheck if it already has the final price first
-    //duplicate endpoints cook the model
-    AI ai(S0, mu, sigma, sentiment, "PLACEHOLDER", 4, prices.back());
+    AI ai(S0, mu, sigma, sentiment, "PLACEHOLDER", 1);
 
     return 0;
 }

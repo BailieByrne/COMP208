@@ -1,0 +1,7 @@
+Batch Error Detection Results
+Timestamp: 2026-02-24 16:42:13.319034
+Number of Trials: 500
+Average L2 Error: 356.0064
+Min L2 Error: 170.9839
+Max L2 Error: 677.5390
+Std Dev: 86.9805
