@@ -1,10 +1,21 @@
 {
+  "java.home": "C:\\Program Files (x86)\\Java\\JDK\\Oracle_JDK-23",
+  "java.jdt.ls.java.home": "C:\\Program Files (x86)\\Java\\JDK\\Oracle_JDK-23",
+  "java.configuration.runtimes": [
+    {
+      "name": "JavaSE-23",
+      "path": "C:\\Program Files (x86)\\Java\\JDK\\Oracle_JDK-23",
+      "default": true
+    }
+  ],
   "java.project.sourcePaths": [
     "Backend/Server",
     "UI"
   ],
   "java.project.outputPath": "bin/classes",
   "java.project.referencedLibraries": [
-    "Deps/javafx-sdk-17.0.18/lib/**/*.jar"
-  ]
+    "c:/Users/pudma/Desktop/208/COMP208/Deps/javafx-sdk-17.0.18/lib/*.jar"
+  ],
+  "java.configuration.updateBuildConfiguration": "automatic",
+  "gradle.java.home": "C:\\Program Files (x86)\\Java\\JDK\\Oracle_JDK-23"
 }
