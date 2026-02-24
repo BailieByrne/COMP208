@@ -1,0 +1,10 @@
+{
+  "java.project.sourcePaths": [
+    "Backend/Server",
+    "UI"
+  ],
+  "java.project.outputPath": "bin/classes",
+  "java.project.referencedLibraries": [
+    "Deps/javafx-sdk-17.0.18/lib/**/*.jar"
+  ]
+}

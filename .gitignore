@@ -1,4 +1,6 @@
 **/build
 **/CMakeFiles
-**/stock_prices.csv
+**/*.csv
 **/predicted_prices.csv
+**/bin
+**/.gradle

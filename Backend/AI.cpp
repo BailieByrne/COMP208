@@ -63,7 +63,7 @@ public:
         getKnownPoints(); //Populate the known points.
 
         //need the final price for the brownian bridge:
-        Known_Points.push_back(std::make_tuple(509, final_price)); //The last point is always known as its the final price, this is needed for the brownian bridge segmentation.
+        Known_Points.push_back(std::make_tuple(509, final_price)); 
         
 
         /**
