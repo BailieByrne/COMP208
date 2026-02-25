@@ -49,3 +49,12 @@ read data -> read local values
 Architecture 
 
 So what is the client architecture - essentially there are 'levels' to each loop, think of it as as how a file system would work. Right at the top we have we have the main loop Init(). From there it can then initiate game states such as the main menu or the actual game - this in turn begins its own state loop in which things can happen - when traversing between these loops we use return allowing information to be passed between which most importantly allows for transitions between states. Furthermore we can inbed loops so within loops such that for example the game can have different fases that play in a specific order and are controlled by the main overall game loop. If you actually read this I will be very suprised. More importantly it definitevly ends a process when not being used so going from the game to the main menu will end the game loop (and thus reset it). This can of course be changed and probably will be in future
+
+-----------------------------
+network / receiving data from server
+
+the data transmitted will be in a CSV standard UTF8 character set - this is relatively unimportant but must be kept consistent between the server and the client
+
+the server ticks at an uknown rate - so the client needs to be ready to receive data at any point, with that being said the game only starts when the game client is ready - the flow below:
+
+game starts -> sends CSV file to server saying to start game -> client prepares to recieve data -> server sends data contiously -> client recieves data (and does appropiate things with it)

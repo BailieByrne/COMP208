@@ -3,12 +3,18 @@ package COMP208.client.clientv1;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.io.InputStream;
+
 import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Scanner;
+import java.io.*;
+import java.net.*;
+import java.nio.charset.StandardCharsets;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
 
 public class Client {
 
@@ -33,6 +39,9 @@ public class Client {
     }
 
     public static Config config;
+
+    private static final String HOST = "127.0.0.1";
+    private static final int PORT = 5000;
 
 
 
@@ -140,6 +149,18 @@ public class Client {
     }
 
 
+    // update to use TCP
+
+
+    public static void callServerStart() {
+
+    }
+
+    public static void receiveServerData() {
+        
+    }
+
+
     public static int MainMenuInit() {
         System.out.println("Project Belford");
         System.out.println("0 quit - 1 Main menu - 2 Game - 3 Settings");
@@ -160,6 +181,8 @@ public class Client {
     public static int GameInit() {
         while (true) {
             print("Game initialized");
+            callServerStart();
+            receiveServerData();
             return 0;
         }
     }
