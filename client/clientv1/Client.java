@@ -43,6 +43,9 @@ public class Client {
     private static final String HOST = "127.0.0.1";
     private static final int PORT = 5000;
 
+    private static Socket socket;
+    private static PrintWriter out;
+    private static BufferedReader in;
 
 
     public static void loadConfigs() {
@@ -150,10 +153,21 @@ public class Client {
 
 
     // update to use TCP
-
+    // radu: im working on these two methods please leave them for now, im going to the gym I'll finish when back :p
 
     public static void callServerStart() {
-
+        try{
+        socket = new Socket(HOST,PORT);
+        out = new PrintWriter(socket.getOutputStream(), true);
+        in = new BufferedReader(new InputStream(socket.getInputStream()));
+        System.out.println("Connected to Server at " + HOST + ":" + "PORT");
+        
+        //username to server
+        out.println(config.username);
+        }
+        catch(IOException e){
+            print("No connection to server: " + e.getMessage);
+        }
     }
 
     public static void receiveServerData() {
