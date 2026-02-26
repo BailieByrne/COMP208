@@ -154,6 +154,7 @@ public class Client {
 
     // update to use TCP
     // radu: im working on these two methods please leave them for now, im going to the gym I'll finish when back :p
+    // This sends an http request essentially to the server
 
     public static void callServerStart() {
         try{
@@ -170,8 +171,15 @@ public class Client {
         }
     }
 
+    // This will read the header line from the csv files to check if the connection goes through.
     public static void receiveServerData() {
-        
+        String message;
+        While((message = in.readLine()) != null){
+            print("Server: " + message);
+        }
+        catch (IOException e){
+            print("Connection lost: " + e.getMessage());
+        }
     }
 
 
@@ -230,5 +238,6 @@ public class Client {
         print("Running Client");
         loadConfigs();
         Init();
+        GameInit();
     }
 }
