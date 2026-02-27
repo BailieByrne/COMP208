@@ -4,3 +4,7 @@
 **/predicted_prices.csv
 **/bin
 **/.gradle
+
+# Compiled binaries
+Backend/program
+*.out

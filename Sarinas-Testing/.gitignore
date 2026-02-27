@@ -1,0 +1,12 @@
+# Don't track generated outputs
+outputs/
+*.csv
+*.png
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual environments
+.venv/
+venv/

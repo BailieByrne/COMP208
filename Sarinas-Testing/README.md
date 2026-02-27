@@ -1,40 +1,29 @@
-# Monte Carlo Testing of the Engine
+# Testing – Requirement Analysis
 
-## Goal
+## Purpose
+This document defines the testing requirements for the COMP208 project.
 
-The C++ engine runs once and generates a `predicted_prices.csv` file.
+## Testing Objectives
+- Verify that implemented features meet specified requirements
+- Identify defects early in development
+- Ensure system reliability and usability
 
-The purpose of this testing harness is to:
+## Functional Testing Requirements
+The system must:
+- Execute defined test cases successfully
+- Validate expected outputs against actual outputs
+- Handle invalid input without crashing
 
-- Run the engine multiple times (e.g. 50+ runs)
-- Store each run in a separate folder
-- Allow statistical analysis of the results
-- Support edge-case testing
-- Enable aggregation (mean, variance, confidence bands)
+## Non-Functional Testing Requirements
+- The system must be tested for usability
+- The system must meet acceptable performance standards
+- The system must demonstrate reliability over repeated tests
 
-Example output structure:
+## Test Environment
+- OS: macOS
+- Editor: Visual Studio Code
+- Version Control: GitHub
 
-outputs/run_0001/predicted_prices.csv  
-outputs/run_0002/predicted_prices.csv  
-
----
-
-## Why This Matters
-
-Monte Carlo simulation is stochastic.  
-Running the engine once is not sufficient for evaluation.
-
-We must:
-- Run it many times
-- Average results
-- Analyse variance
-- Detect instability or edge-case failure
-
----
-
-## Next Steps
-
-- Implement `run_mc.py` to automate repeated execution
-- Implement `analysis.py` to aggregate results
-- Implement `plots.py` to visualise outputs
-- Implement `edge_cases.py` to test failure scenarios
+## Assumptions
+- Requirements are clearly documented
+- Test cases are derived from functional requirements
