@@ -156,6 +156,13 @@ public class Client {
     // radu: im working on these two methods please leave them for now, im going to the gym I'll finish when back :p
     // This sends an http request essentially to the server
 
+    /**
+     * BAILIE:
+     * Looks great so far, i wont touch, with the out.println if we turn it to byte data we can send it with a check sum
+     * This lets us checksum and we can also encrypt the data if we want for more anticheat as someone coudl just change their username in the config
+     * If you use getBytes() make sure u specify the encoding on both client and server UTF8 should be fine. Just remeber sanitise usernames
+    */
+
     public static void callServerStart() {
         try{
         socket = new Socket(HOST,PORT);
