@@ -1,29 +1,11 @@
-# Testing – Requirement Analysis
+# Monte Carlo testing of the engine
 
-## Purpose
-This document defines the testing requirements for the COMP208 project.
+Goal 
 
-## Testing Objectives
-- Verify that implemented features meet specified requirements
-- Identify defects early in development
-- Ensure system reliability and usability
+Your C++ program is like a toy car that drives once and writes predicted_prices.csv.
 
-## Functional Testing Requirements
-The system must:
-- Execute defined test cases successfully
-- Validate expected outputs against actual outputs
-- Handle invalid input without crashing
+We want Python to say: drive 50 times, and after each drive, put the CSV into a new box:
 
-## Non-Functional Testing Requirements
-- The system must be tested for usability
-- The system must meet acceptable performance standards
-- The system must demonstrate reliability over repeated tests
+outputs/run_0001/predicted_prices.csv
 
-## Test Environment
-- OS: macOS
-- Editor: Visual Studio Code
-- Version Control: GitHub
-
-## Assumptions
-- Requirements are clearly documented
-- Test cases are derived from functional requirements
+outputs/run_0002/predicted_prices.csv
