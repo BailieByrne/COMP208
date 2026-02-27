@@ -4,6 +4,8 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
+//These are the imports needed for the SceneBuilder windows
+
 
 public class main {
     public static void main(String[] args) {

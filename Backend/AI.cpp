@@ -14,17 +14,9 @@
 
 
 class AI {
-    //Wrap these in priv/pub
-    const int points = 510; // 510 minutes in a trading day (8:00 to 16:30)
-    double S0;
-    double mu;
-    double sigma;
-    double sentiment;
-    char* STOCK;
-    int difficulty;
-    double final_price;
 public:
-/**
+    const int points = 510; // 510 minutes in a trading day (8:00 to 16:30)
+    /**
  * IMPORTANt:
  * Remove the logic from the constructor to avoid heavy computation
  */
@@ -48,7 +40,9 @@ public:
         //The first point is always known as its the starting price.
         //Plus the first point is needed for brownian bridge segmentation.
 
+
         //Extract Known_Points from difficulty
+        //Accidentally made it to accurate, even with 3 points its quite accurate
         switch(difficulty){
             case 1:
                 Known_Points_Amount = 3;
@@ -70,26 +64,26 @@ public:
                 Known_Points_Amount = 1;
                 MonteCarloRuns = 1000;           
         };
+        
+    } 
+        
+    /**
+     * Logic Seperated from constructor
+     */
+    void run(){
         getKnownPoints(); //Populate the known points.
 
         //need the final price for the brownian bridge:
         // Known_Points.push_back(std::make_tuple(509, final_price)); 
         
-
-        /**
-         * WRAP THIS IN THE MONTE CARLO
-         */
-
-         //Outdated 1 pass, L2 error of 150-650
-        MonteCarloSimulate(MonteCarloRuns); //Run the monte carlo sim with 1000 runs,
+        //Ive scaled the monte carlo runs, i added mean fusing to preserver the overall shape of the monte carlo mean but added some randomness by fusing it with a random path and also taking the median path to prevent outliers dominating the prediction, this should give us a more realistic predicted path.
+        MonteCarloSimulate(MonteCarloRuns); 
+        //Higher difficulty is higher computation, on my system it can run 8 full graphs + AI in under 1 second which is plenty fast
         //More runs is smoother line
         //now store the prediction in a CSV
-        writeToCSV();
-
-        
+        writeToCSV(); 
     }
-
-
+    
     /**
      * IMPORTANT:
      * THIS OPERATES IN LOG SPACE PRICES MUST BE log(price) 
@@ -139,7 +133,7 @@ public:
             return;
         }
 
-        // Read all rows (skip header)
+        // Read all rows
         std::vector<std::tuple<int, double>> all_points;
         std::string line;
 
@@ -154,15 +148,20 @@ public:
             std::getline(ss, ticker_str, ',');
             std::getline(ss, price_str, ',');
 
-            int time = std::stoi(time_str);
-            double price = std::stod(price_str);
-
-            all_points.emplace_back(time, price);
+            //Stoid and stod can throw errors so wrap them
+            try {
+                int time = std::stoi(time_str);
+                double price = std::stod(price_str);
+                all_points.emplace_back(time, price);
+            } catch (const std::exception& e) {
+                std::cerr << "Error parsing line: " << line << " - " << e.what() << "\n";
+            }
         }
 
+        //Close file for safety
         csv_file.close();
 
-        // Create index vector 0–509
+        // Create index vector 0–509 (510 total points)
         std::vector<int> indices(all_points.size());
         std::iota(indices.begin(), indices.end(), 0);
 
@@ -187,35 +186,35 @@ public:
          */
     }
 
-void MonteCarloSimulate(int runs)
+    void MonteCarloSimulate(int runs)
 {
     assert(runs > 0);
 
     const int P = this->points;
 
-    // determine thread count
-    unsigned int numThreads = std::thread::hardware_concurrency();
+    // detect how many threads we can use
+    int numThreads = std::thread::hardware_concurrency();
     if (numThreads == 0)
-        numThreads = 4;
+        numThreads = 4; // fallback just incase
 
     int runsPerThread = runs / numThreads;
     int remainingRuns = runs % numThreads;
 
-    // accumulate stats for mean / std
+    // instead of storing full paths
+    // we store values per time step
+    // this is way more cache freindly
+    std::vector<std::vector<double>> valuesPerTime(P, std::vector<double>(runs));
+
+    // global accumulators for mean and variance
     std::vector<double> globalSum(P, 0.0);
     std::vector<double> globalSumSq(P, 0.0);
 
-    // store every simulated path
-    AllMonteCarloPaths.clear();
-    AllMonteCarloPaths.reserve(runs);
-
-    //threads
     std::vector<std::thread> threads;
-    std::mutex mergeMutex;
-    std::mutex pathMutex;
+    std::mutex mergeMutex; // only used once per thread (very low contention)
 
-    auto worker = [&](int threadRuns)
+    auto worker = [&](int startIndex, int threadRuns)
     {
+        // local accumulators so threads dont fight eachother
         std::vector<double> localSum(P, 0.0);
         std::vector<double> localSumSq(P, 0.0);
 
@@ -223,47 +222,47 @@ void MonteCarloSimulate(int runs)
 
         for (int r = 0; r < threadRuns; r++)
         {
-            // generate one full stochastic path
+            int globalIndex = startIndex + r;
+
+            // generate one monte carlo path
             std::vector<double> path = this->predictGraph(gen);
 
-            // store it for later median / randomness blending
-            {
-                std::lock_guard<std::mutex> lock(pathMutex);
-                AllMonteCarloPaths.push_back(path);
-            }
-
-            // accumulate statistics
             for (int t = 0; t < P; t++)
             {
                 double price = path[t];
+
+                // store value directly (no push_back, no resize)
+                valuesPerTime[t][globalIndex] = price;
+
                 localSum[t] += price;
                 localSumSq[t] += price * price;
             }
         }
 
-        // merge thread-local stats safely
+        // merge once at the end (way faster then locking per run)
+        std::lock_guard<std::mutex> lock(mergeMutex);
+        for (int t = 0; t < P; t++)
         {
-            std::lock_guard<std::mutex> lock(mergeMutex);
-
-            for (int t = 0; t < P; t++)
-            {
-                globalSum[t] += localSum[t];
-                globalSumSq[t] += localSumSq[t];
-            }
+            globalSum[t] += localSum[t];
+            globalSumSq[t] += localSumSq[t];
         }
     };
 
-    // launch worker threads
-    for (unsigned int i = 0; i < numThreads; i++)
+    int currentStart = 0;
+
+    for (int i = 0; i < numThreads; i++)
     {
-        int threadRuns = runsPerThread + ((int)i < remainingRuns ? 1 : 0);
-        threads.emplace_back(worker, threadRuns);
+        int threadRuns = runsPerThread + (i < remainingRuns ? 1 : 0);
+
+        threads.emplace_back(worker, currentStart, threadRuns);
+
+        currentStart += threadRuns;
     }
 
-    for (auto &thread : threads)
+    for (auto& thread : threads)
         thread.join();
 
-    // compute mean and standard deviation
+    // now compute mean + stddev
     MonteCarloMean.assign(P, 0.0);
     MonteCarloStdDev.assign(P, 0.0);
 
@@ -273,83 +272,57 @@ void MonteCarloSimulate(int runs)
         double variance = (globalSumSq[t] / runs) - (mean * mean);
 
         if (variance < 0.0)
-            variance = 0.0;
+            variance = 0.0; // floating point saftey
 
+        assert(variance >= 0.0);
         MonteCarloMean[t] = mean;
         MonteCarloStdDev[t] = std::sqrt(variance);
     }
 
-    // -----------------------------
     // compute median path
-    // -----------------------------
-    std::vector<double> medianPath(P, 0.0);
+    std::vector<double> medianPath(P);
 
-    if (!AllMonteCarloPaths.empty())
+    for (int t = 0; t < P; t++)
     {
-        size_t numPaths = AllMonteCarloPaths.size();
+        auto& vec = valuesPerTime[t];
 
-        for (int t = 0; t < P; t++)
+        std::nth_element(vec.begin(),
+                         vec.begin() + vec.size() / 2,
+                         vec.end());
+
+        double median = vec[vec.size() / 2];
+
+        if (vec.size() % 2 == 0)
         {
-            std::vector<double> values;
-            values.reserve(numPaths);
+            std::nth_element(vec.begin(),
+                             vec.begin() + vec.size() / 2 - 1,
+                             vec.end());
 
-            // collect values at time t from all simulated paths
-            for (size_t r = 0; r < numPaths; r++)
-                values.push_back(AllMonteCarloPaths[r][t]);
-
-            // partial sort to get median efficiently
-            std::nth_element(values.begin(),
-                             values.begin() + values.size() / 2,
-                             values.end());
-
-            double median = values[values.size() / 2];
-
-            // if even number of samples, average the two middle values
-            if (values.size() % 2 == 0)
-            {
-                std::nth_element(values.begin(),
-                                 values.begin() + values.size() / 2 - 1,
-                                 values.end());
-
-                double lower = values[values.size() / 2 - 1];
-                double upper = median;
-
-                median = 0.5 * (lower + upper);
-            }
-
-            medianPath[t] = median;
+            median = 0.5 * (median + vec[vec.size() / 2 - 1]);
         }
+
+        medianPath[t] = median;
     }
 
-    // -----------------------------
-    // blend median with one random path
-    // -----------------------------
-    std::vector<double> randomPath;
+    // pick a random path index to blend
+    std::mt19937 gen(std::random_device{}());
+    std::uniform_int_distribution<int> dist(0, runs - 1);
 
-    if (!AllMonteCarloPaths.empty())
-    {
-        std::mt19937 gen(std::random_device{}());
-        std::uniform_int_distribution<size_t> dist(
-            0, AllMonteCarloPaths.size() - 1);
+    int randomIndex = dist(gen);
 
-        size_t idx = dist(gen);
-        randomPath = AllMonteCarloPaths[idx];
-    }
-    else
-    {
-        randomPath.assign(P, 0.0);
-    }
-
-    // final output path
     Predicted_Prices.resize(P);
 
     for (int t = 0; t < P; t++)
     {
+        double randomVal = valuesPerTime[t][randomIndex];
+
+        // weighted blend of median + random path
         Predicted_Prices[t] =
             0.7 * medianPath[t] +
-            0.3 * randomPath[t];
+            0.3 * randomVal;
     }
 }
+
     std::vector<double> predictGraph(std::mt19937& gen){
         const int points = 510;
         assert(points > 1);
@@ -361,13 +334,13 @@ void MonteCarloSimulate(int runs)
         double mu_eff = this->mu * this->sentiment;
         double alpha = mu_eff - 0.5 * this->sigma * this->sigma;
 
-        //Randomness uses the provided generator
 
         //Use the local copy
-        std::vector<std::tuple<int,double>> localKnownPoints = Known_Points;
+        const auto& localKnownPoints = Known_Points;
 
         //now convert known prices to log space for brownian parsing
         std::vector<std::pair<int,double>> logKnown;
+        logKnown.reserve(localKnownPoints.size());
         for (const auto& kp : localKnownPoints){
             int time = std::get<0>(kp);
             double price = std::get<1>(kp);
@@ -405,11 +378,14 @@ void MonteCarloSimulate(int runs)
             );
         }
 
+        //Removed the final anchor as the graph was too preicitve
+        //This allows thhe end of the graph to predict the close as knowing the end price makes the AI too good.
+        //Adds more realism as the AI has to predict the close without knowing it, just like in real life.
         int last_time = logKnown.back().first;
         if (last_time < points - 1) {
             double X_start = logKnown.back().second;
+            std::normal_distribution<> dis(0.0, 1.0);
             for (int t = last_time + 1; t < points; t++) {
-                std::normal_distribution<> dis(0.0, 1.0);
                 double dW = std::sqrt(dt) * dis(gen);
                 double dX = alpha * dt + this->sigma * dW;
                 X[t] = X[t-1] + dX;
@@ -421,6 +397,7 @@ void MonteCarloSimulate(int runs)
         std::vector<double> path;
         path.reserve(points);
 
+        //Push the converted log prices back into normal space to get the final predicted path
         for (int i = 0; i < points; i++){
             double converted = std::exp(X[i]);
             path.push_back(converted);
@@ -429,6 +406,9 @@ void MonteCarloSimulate(int runs)
         return path;
     }
 
+    /**
+     * Self Explanatory function
+     */
     void writeToCSV(){
         std::ofstream csv_file("predicted_prices.csv");
         csv_file << "Time,Ticker,Price\n";
@@ -446,7 +426,14 @@ private:
     std::vector<std::tuple<int, double>> Known_Points; //Vector of tuples to store the known points (time, price)
     std::vector<double> MonteCarloMean;
     std::vector<double> MonteCarloStdDev;
-    std::vector<std::vector<double>> AllMonteCarloPaths; //Store all paths to compute median
+    std::vector<std::vector<double>> AllMonteCarloPaths;
+    double S0;
+    double mu;
+    double sigma;
+    double sentiment;
+    char* STOCK;
+    int difficulty;
+    double final_price; //Store all paths to compute median
 };
 
 
