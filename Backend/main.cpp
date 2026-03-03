@@ -50,7 +50,7 @@ int main() {
     csv_file.close();
 
     //Create the AI
-    AI ai(S0, mu, sigma, sentiment, "PLACEHOLDER", 1);
+    AI ai(S0, mu, sigma, sentiment, "PLACEHOLDER", 4);
     //Since seperating the logic from the constructor, we need to call the run function to execute the AI run
     ai.run();
 

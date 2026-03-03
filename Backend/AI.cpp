@@ -347,7 +347,6 @@ public:
             //LOG CONVERSION HERE
             double log_price = std::log(price);
             assert(std::isfinite(log_price));
-            assert(log_price > 0);
             //Seperate the log conversion from the emplace to help debug
             logKnown.emplace_back(time, log_price);
         }
