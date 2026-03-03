@@ -4,9 +4,9 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $repoRoot
 
-$src = "client/clientV1/Client.java"
-$lib = "client/lib/*"
-$out = "client/out"
+$src = "legacy/clientV1/Client.java"
+$lib = "legacy/lib/*"
+$out = "legacy/out"
 
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 
@@ -16,4 +16,4 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "Running Java application..."
 Write-Host "------------------------------------"
-java -cp "$out;client/lib/*" Client
+java -cp "$out;legacy/lib/*" Client
