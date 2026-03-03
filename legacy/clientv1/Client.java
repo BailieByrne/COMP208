@@ -1,5 +1,3 @@
-package COMP208.client.clientv1;
-
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -135,7 +133,7 @@ public class Client {
     }
 
     public static void Init() {
-        int state = 1; //change this if you want the game to start from a different state - by default its the main menu as obviosuly the game should open onto the main menu
+        int state = 2; //change this if you want the game to start from a different state - by default its the main menu as obviosuly the game should open onto the main menu
         while (true) {
             print("Main loop initialized");
             if (state == 0) {
@@ -163,28 +161,33 @@ public class Client {
      * If you use getBytes() make sure u specify the encoding on both client and server UTF8 should be fine. Just remeber sanitise usernames
     */
 
-    public static void callServerStart() {
-        try{
-        socket = new Socket(HOST,PORT);
-        out = new PrintWriter(socket.getOutputStream(), true);
-        in = new BufferedReader(new InputStream(socket.getInputStream()));
-        System.out.println("Connected to Server at " + HOST + ":" + "PORT");
-        
-        //username to server
-        out.println(config.username);
+    public static boolean callServerStart() {
+        try {
+            socket = new Socket(HOST,PORT);
+            out = new PrintWriter(socket.getOutputStream(), true);
+            in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+            System.out.println("Connected to Server at " + HOST + ":" + PORT);
+            out.println(config.username); //username to server
+            return true;
         }
         catch(IOException e){
-            print("No connection to server: " + e.getMessage);
+            print("No connection to server: " + e.getMessage());
+            return false;
         }
     }
 
     // This will read the header line from the csv files to check if the connection goes through.
     public static void receiveServerData() {
-        String message;
-        While((message = in.readLine()) != null){
-            print("Server: " + message);
+        if (in == null) {
+            print("Not connected.");
+            return;
         }
-        catch (IOException e){
+        String message;
+        try {
+            while ((message = in.readLine()) != null) {
+                print("Server: " + message);
+            }
+        } catch (IOException e) {
             print("Connection lost: " + e.getMessage());
         }
     }
@@ -210,8 +213,12 @@ public class Client {
     public static int GameInit() {
         while (true) {
             print("Game initialized");
-            callServerStart();
-            receiveServerData();
+            if (callServerStart()) {
+                receiveServerData();
+            } else {
+                print("Failed to connect to server, returning to main menu.");
+                return 1;
+            }
             return 0;
         }
     }
@@ -244,7 +251,6 @@ public class Client {
     public static void main(String[] args) {
         print("Running Client");
         loadConfigs();
-        Init();
-        GameInit();
+        Init();    
     }
 }

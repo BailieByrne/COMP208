@@ -16,4 +16,4 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "Running Java application..."
 Write-Host "------------------------------------"
-java -cp "$out;client/lib/*" COMP208.client.clientv1.Client
+java -cp "$out;client/lib/*" Client

@@ -76,7 +76,8 @@ public:
         //need the final price for the brownian bridge:
         // Known_Points.push_back(std::make_tuple(509, final_price)); 
         
-        //Ive scaled the monte carlo runs, i added mean fusing to preserver the overall shape of the monte carlo mean but added some randomness by fusing it with a random path and also taking the median path to prevent outliers dominating the prediction, this should give us a more realistic predicted path.
+       
+        //Ive scaled the monte carlo runs, i added mean fusing to preserver the overall shape of the monte carlo mean but added some randomness by fusing it with a random path and also taking the median path to prevent outliers dominating the prediction, this should give us a more realistic predicted path
         MonteCarloSimulate(MonteCarloRuns); 
         //Higher difficulty is higher computation, on my system it can run 8 full graphs + AI in under 1 second which is plenty fast
         //More runs is smoother line
@@ -347,7 +348,6 @@ public:
             //LOG CONVERSION HERE
             double log_price = std::log(price);
             assert(std::isfinite(log_price));
-            assert(log_price > 0);
             //Seperate the log conversion from the emplace to help debug
             logKnown.emplace_back(time, log_price);
         }

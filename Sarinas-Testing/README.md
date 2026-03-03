@@ -1,11 +1,40 @@
-# Monte Carlo testing of the engine
+# Monte Carlo Testing of the Engine
 
-Goal 
+## Goal
 
-Your C++ program is like a toy car that drives once and writes predicted_prices.csv.
+The C++ engine runs once and generates a `predicted_prices.csv` file.
 
-We want Python to say: drive 50 times, and after each drive, put the CSV into a new box:
+The purpose of this testing harness is to:
 
-outputs/run_0001/predicted_prices.csv
+- Run the engine multiple times (e.g. 50+ runs)
+- Store each run in a separate folder
+- Allow statistical analysis of the results
+- Support edge-case testing
+- Enable aggregation (mean, variance, confidence bands)
 
-outputs/run_0002/predicted_prices.csv
+Example output structure:
+
+outputs/run_0001/predicted_prices.csv  
+outputs/run_0002/predicted_prices.csv  
+
+---
+
+## Why This Matters
+
+Monte Carlo simulation is stochastic.  
+Running the engine once is not sufficient for evaluation.
+
+We must:
+- Run it many times
+- Average results
+- Analyse variance
+- Detect instability or edge-case failure
+
+---
+
+## Next Steps
+
+- Implement `run_mc.py` to automate repeated execution
+- Implement `analysis.py` to aggregate results
+- Implement `plots.py` to visualise outputs
+- Implement `edge_cases.py` to test failure scenarios
