@@ -2,6 +2,13 @@
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * TODO:
+ * -HERE WE NEED TO ADD THE DB INTEGRATION AND LINK CLIENT IP/LOGIN TO RECORDS
+ * -THEN WE CHECK THE INVENTORY JSON STRING FOR POWERUP AMOUNT
+ * - SEVER ACTS AS TRUTH FOR POWERUP ACTIVATION
+ */
+
 public class ClientState {
     private final int clientID;
     private final Map<String, Long> activePowerups = new ConcurrentHashMap<>();
