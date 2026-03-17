@@ -20,7 +20,7 @@ public:
  * IMPORTANt:
  * Remove the logic from the constructor to avoid heavy computation
  */
-    AI(double S0, double mu, double sigma, double sentiment, char* STOCK, int difficulty) {
+    AI(double S0, double mu, double sigma, double sentiment, char* ticker, int difficulty) {
         /**
         AI will be passed the params to run monte carlo sim
         //Dependant on its difficulty is how many fixed points it will know.
@@ -33,7 +33,7 @@ public:
         this->mu = mu;
         this->sigma = sigma;
         this->sentiment = sentiment;
-        this->STOCK = STOCK;
+        this->ticker = ticker;
         this->difficulty = difficulty;
         this->final_price = final_price;
         Known_Points.push_back(std::make_tuple(0, S0)); 
@@ -128,9 +128,9 @@ public:
         }
 
     void getKnownPoints() {
-        std::ifstream csv_file("stock_prices.csv");
+        std::ifstream csv_file(this->ticker + std::string("_stock_prices.csv"));
         if (!csv_file.is_open()) {
-            std::cerr << "Failed to open stock_prices.csv\n";
+            std::cerr << "Failed to open " << this->ticker << "_stock_prices.csv\n";
             return;
         }
 
@@ -319,8 +319,8 @@ public:
 
         // weighted blend of median + random path
         Predicted_Prices[t] =
-            0.7 * medianPath[t] +
-            0.3 * randomVal;
+            0.5 * medianPath[t] +
+            0.5 * randomVal;
     }
 }
 
@@ -410,11 +410,11 @@ public:
      * Self Explanatory function
      */
     void writeToCSV(){
-        std::ofstream csv_file("predicted_prices.csv");
+        std::ofstream csv_file(this->ticker + std::string("_predicted_prices.csv"));
         csv_file << "Time,Ticker,Price\n";
 
         for (size_t i = 0; i < Predicted_Prices.size(); ++i) {
-            csv_file << i << "," << STOCK << "," << Predicted_Prices[i] << "\n";
+            csv_file << i << "," << this->ticker << "," << Predicted_Prices[i] << "\n";
         }
         csv_file.close();
         std::cout << "Done";
@@ -431,9 +431,13 @@ private:
     double mu;
     double sigma;
     double sentiment;
-    char* STOCK;
+    char* ticker;
     int difficulty;
     double final_price; //Store all paths to compute median
 };
 
-
+/**
+ * TODO:
+ * - Make the AI dumber even on diff 1 the l2 error is low, maybe add a +/-5% on the params passed from the GBM to decrease accuracy
+ * - Good problem to have though
+ */
