@@ -1,50 +1,43 @@
+// ServerController.java
 import java.io.*;
 import java.net.*;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 
-//Server controller - listens for client connections
 public class ServerController implements Runnable {
+    public final Map<String, Integer> clientData = new HashMap<>();
+    public int clientID = 0;
     private static final int PORT = 5000;
     private static final String HOST = "127.0.0.1";
     private ServerSocket serverSocket;
     private volatile boolean running = true;
 
-    //Simple logging with time stamp use new Date() change to System time
     private void log(String message) {
         String timestamp = new SimpleDateFormat("HH:mm:ss").format(new Date());
         System.out.println("[" + timestamp + "] " + message);
     }
 
     @Override
-    /**
-     * RUN:
-     * 1. Create a server socket bound to the specified port and host.
-     * 2. Log that the server is listening and waiting for client connections.
-     * 3. Enter a loop that continues while the server is running (this is because the socket is blocking)
-     */
     public void run() {
         try {
             serverSocket = new ServerSocket(PORT, 50, InetAddress.getByName(HOST));
-            log("Server is listening on " + HOST + ":" + PORT);
-            log("Waiting for client connections...");
-            log("");
+            log("Server listening on " + HOST + ":" + PORT);
 
             while (running) {
                 try {
                     Socket clientSocket = serverSocket.accept();
                     String clientIP = clientSocket.getInetAddress().getHostAddress();
                     log("CLIENT CONNECTED: " + clientIP + ":" + clientSocket.getPort());
-                    
-                    // Handle client in a separate thread
-                    Thread clientThread = new Thread(new ClientHandler(clientSocket));
+                    clientData.put(clientIP, clientID++);
+
+                    Thread clientThread = new Thread(new ClientHandler(clientSocket, clientData.get(clientIP)));
                     clientThread.setDaemon(true);
                     clientThread.start();
-                    //ctach and log socket errors
+
                 } catch (SocketException e) {
-                    if (running) {
-                        log("Socket error: " + e.getMessage());
-                    }
+                    if (running) log("Socket error: " + e.getMessage());
                 }
             }
         } catch (IOException e) {
@@ -53,7 +46,6 @@ public class ServerController implements Runnable {
         }
     }
 
-    //handle server stop
     public void stop() {
         running = false;
         try {
@@ -66,42 +58,35 @@ public class ServerController implements Runnable {
         }
     }
 
-    // Inner class to handle individual client connections
     private class ClientHandler implements Runnable {
-        private Socket clientSocket;
-        private String clientIP;
+        private final Socket clientSocket;
+        private final String clientIP;
+        private final int clientID;
 
-        //Client handler construc 
-        public ClientHandler(Socket socket) {
+        public ClientHandler(Socket socket, int clientID) {
             this.clientSocket = socket;
-            this.clientIP = socket.getInetAddress().getHostAddress();
+            this.clientIP     = socket.getInetAddress().getHostAddress();
+            this.clientID     = clientID;
         }
 
         @Override
-        //Main handler to allow reading froma nd writing to client socket
         public void run() {
             try (
-                InputStream input = clientSocket.getInputStream();
-                OutputStream output = clientSocket.getOutputStream();
+                BufferedReader reader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+                BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(clientSocket.getOutputStream()))
             ) {
-                BufferedReader reader = new BufferedReader(new InputStreamReader(input));
-                BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(output));
-
                 String message;
                 while ((message = reader.readLine()) != null) {
                     log("FROM " + clientIP + ": " + message);
-                    
                     writer.write("Server received: " + message + "\n");
                     writer.flush();
                 }
                 log("CLIENT DISCONNECTED: " + clientIP);
             } catch (IOException e) {
-                log("Client DISCONNECTED: " + e.getMessage() + " (IP: " + clientIP + ")");
+                log("Client disconnected: " + e.getMessage() + " (IP: " + clientIP + ")");
             } finally {
-                try {
-                    clientSocket.close();
-                } catch (IOException e) {
-                    log("Error closing client socket: " + e.getMessage());
+                try { clientSocket.close(); } catch (IOException e) {
+                    log("Error closing socket: " + e.getMessage());
                 }
             }
         }

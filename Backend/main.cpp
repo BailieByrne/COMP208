@@ -41,22 +41,22 @@ int main(int argc, char *argv[]) {
     double vol_sqrt_dt = sigma * std::sqrt(dt);
 
     // Open CSV file and write header
-    std::ofstream csv_file("stock_prices.csv");
+    std::ofstream csv_file(ticker + std::string("_stock_prices.csv"));
     csv_file << "Time,Ticker,Price\n";
-    csv_file << "0,STOCK," << S0 << "\n"; // Write initial price
+    csv_file << "0," << ticker << "," << S0 << "\n"; // Write initial price
 
     //Loops through the points to generate the stock prices using the GBM formula with ito correction
     for (int i = 1; i < points; ++i) {
         double Z = dis(gen);
         double price = prices[i - 1] * std::exp(drift + vol_sqrt_dt * Z);
         prices.push_back(price);
-        csv_file << i << ",STOCK," << price << "\n"; // Write immediately
+        csv_file << i << "," << ticker << "," << price << "\n"; // Write immediately
     }
     
     csv_file.close();
 
     //Create the AI
-    AI ai(S0, mu, sigma, sentiment, "PLACEHOLDER", 4);
+    AI ai(S0, mu, sigma, sentiment, ticker, 4);
     //Since seperating the logic from the constructor, we need to call the run function to execute the AI run
     ai.run();
 
