@@ -6,17 +6,23 @@
 #include <fstream>
 #include <string>
 #include <iomanip>
+#include <cstring>
 #include "AI.cpp"
 
 
-int main() {
+
+int main(int argc, char *argv[]) {
     // Parameters for Brownian motion stock price simulation
     const int points = 510; // 510 minutes in a trading day (8:00 to 16:30)
     double S0 = 500.0;  // Initial stock price
     double mu = 0.05;   // Drift
     double sigma = 0.4; // Volatility
     double sentiment = 1.0; // Market sentiment
+
+    char ticker[10];
+    std::strcpy(ticker, argv[1]); // Gets ticker from CLI
     
+
     // Random number generation using normal distribution
     std::random_device rd;
     std::mt19937 gen(rd());
