@@ -1,47 +1,71 @@
 import subprocess
 from pathlib import Path
-
-# Where this script lives
-SCRIPT_DIR = Path(__file__).resolve().parent
-
-# Project root (two folders up)
-PROJECT_ROOT = SCRIPT_DIR.parent.parent
-
-# Path to C++ executable
-EXE = PROJECT_ROOT / "Backend" / "program"
-
-# Output folder
-OUT_ROOT = PROJECT_ROOT / "Sarinas-Testing" / "outputs"
-
-# Number of Monte Carlo runs
-RUNS = 5
+import time
+from datetime import datetime
 
 
-def main():
-    print("C++ program is at:", EXE)
-    print("Saving outputs to:", OUT_ROOT)
+exe = Path("/Users/sarinasaiyed/COMP208/Backend/program")
+outer_folder = Path("/Users/sarinasaiyed/COMP208/Sarinas-Testing/outputs")
+runs = 75
 
-    # Make sure outputs folder exists
-    OUT_ROOT.mkdir(parents=True, exist_ok=True)
+def run_simulation():  
+    if not outer_folder.exists():
+        outer_folder.mkdir()
 
-    for i in range(1, RUNS + 1):
-        run_dir = OUT_ROOT / f"run_{i:04d}"
-        run_dir.mkdir(parents=True, exist_ok=True)
+    log_file = outer_folder / "timing_log.txt"
 
-        print(f"Running simulation {i}/{RUNS}...")
+    start_time_total = time.time()
 
-        # Run the program inside that folder
-        subprocess.run([str(EXE)], cwd=str(run_dir), check=True)
+    with open(log_file, 'w') as log:
+        log.write(f"MC test run: {datetime.now()} \n") 
+        log.write("=" * 60 + "\n\n")
 
-        # Check file got created
-        csv_file = run_dir / "predicted_prices.csv"
-        if csv_file.exists():
-            print("✅ Created:", csv_file)
-        else:
-            print("❌ Missing:", csv_file)
+        for i in range(1, runs + 1):
+            start_time = time.time()
 
-    print("All done!")
+            run_directory = outer_folder / f"run_{i}"        
+            run_directory.mkdir(exist_ok = True)
 
+            try:    
+                subprocess.run([str(exe)],
+                              cwd=run_directory,
+                              check = True)
+        
+                output_file = run_directory / "predicted_prices.csv"
+                if (output_file).exists():
+                    status = "Completed"
+                    print(f" \n Run #{i} completed successfully")
+                else:
+                    status = "No_CSV"
+                    print(f" \n Run #{i} finished with no CSV file found")
+
+            except subprocess.CalledProcessError as e:
+                status = f"failed: {e}"
+                print(f" \n Run #{i} failed with error: {e}")
+
+            # calculating how long the run time takes
+            end_time = time.time()
+            run_length_time = end_time - start_time
+
+            print(f" Time taken: {run_length_time:.2f} seconds")
+            log.write(f"Run {i}: {run_length_time:.2f}s - {status}\n")
+    
+        #calculating total time
+        end_time_total = time.time()
+        total_time = end_time_total - start_time_total
+
+        log.write("\n" + "=" * 60 + "\n")
+        log.write(f"Total runs: {runs}\n")
+        log.write(f"Total time: {total_time:.2f} seconds")
+        log.write(f"Average time per run: {total_time/runs:.2f} seconds\n")
+
+    print("\n" + "=" * 50)
+    print("All simulations complete")
+    print(f"Total time: {total_time:.2f}")
+    print(f"Log saved to: {log_file}")
+
+    
 
 if __name__ == "__main__":
-    main()
+    run_simulation()
+        
