@@ -8,13 +8,14 @@ OUT_PATH=bin/classes
 mkdir -p "$OUT_PATH"
 
 echo "Compiling Client..."
-javac --module-path "$JAVAFX_PATH/lib" --add-modules javafx.controls,javafx.fxml,javafx.graphics -d "$OUT_PATH" "$SERVER_PATH"/*.java "$CLIENT_PATH"/*.java 2>/dev/null
+JAVA_FILES=$(find "$SERVER_PATH" "$CLIENT_PATH" -name "*.java")
+javac --module-path "$JAVAFX_PATH/lib" --add-modules javafx.controls,javafx.fxml,javafx.graphics -d "$OUT_PATH" $JAVA_FILES 2>/dev/null
 
 if [ $? -eq 0 ]; then
     echo "Compilation successful!"
-    echo "Copying FXML and CSS files"
-    cp "$CLIENT_PATH"/*.fxml "$OUT_PATH/" >/dev/null 2>&1
-    cp "$CLIENT_PATH"/*.css "$OUT_PATH/" >/dev/null 2>&1
+    echo "Copying Assets folder"
+    rm -rf "$OUT_PATH/Assets"
+    cp -R "$CLIENT_PATH/Assets" "$OUT_PATH/"
     echo "Starting client..."
     java --module-path "$JAVAFX_PATH/lib" --add-modules javafx.controls,javafx.fxml,javafx.graphics -cp "$OUT_PATH" client 2>/dev/null
 else

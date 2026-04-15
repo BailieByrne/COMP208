@@ -1,5 +1,6 @@
-// main.java
+// main.java for running the server
 public class main {
+    // boot server loop
     public static void main(String[] args) {
         ServerController server = new ServerController();
         Thread serverThread = new Thread(server);
