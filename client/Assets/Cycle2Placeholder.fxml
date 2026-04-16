@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.text.Font?>
+
+<VBox alignment="CENTER" prefHeight="500.0" prefWidth="900.0" spacing="18.0" stylesheets="@GameUI.css" xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" fx:controller="Cycle2Controller">
+   <padding>
+      <Insets top="24.0" right="24.0" bottom="24.0" left="24.0" />
+   </padding>
+   <children>
+      <Label text="Cycle 2">
+         <font>
+            <Font size="42.0" />
+         </font>
+      </Label>
+      <Label fx:id="messageLabel" text="Java Tiled world placeholder running..." />
+      <Label fx:id="remainingLabel" text="Waiting for cycle packets..." />
+      <Button mnemonicParsing="false" onAction="#onBackToMenu" prefHeight="42.0" prefWidth="220.0" text="Back To Main Menu" />
+   </children>
+</VBox>

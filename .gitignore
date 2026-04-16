@@ -4,3 +4,5 @@
 **/predicted_prices.csv
 **/bin
 **/.gradle
+**/*.db
+**/Logs
