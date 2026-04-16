@@ -79,13 +79,13 @@ protected void paintComponent(Graphics g) {
             for (int col = 0; col < mapWidth; col++) {
                 int tileID = mapGrid[row][col] - 1; 
                 if (tileID >= 0) {
-                    // THE MAGIC NUMBER: 1024px width / 32px tile = 32 columns
+                    // 1024px width / 32px tile = 32 columns
                     int columns = 32; 
                     
                     int sx = (tileID % columns) * 32; 
                     int sy = (tileID / columns) * 32;
                     
-                    // DRAWING FIX: Draw a 32x32 slice onto the map
+                    // Draw a 32x32 slice onto the map
                     // We draw it starting at col*16, but make it 32px wide/tall to match Tiled
                     g.drawImage(tilesetImage, 
                         col * 16, row * 16, col * 16 + 32, row * 16 + 32, 
