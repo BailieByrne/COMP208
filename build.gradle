@@ -15,6 +15,7 @@ wrapper {
 }
 
 repositories {
+
 }
 
 dependencies {
@@ -23,6 +24,7 @@ dependencies {
     implementation fileTree(dir: 'Deps/sqlite', include: '*.jar')
     implementation fileTree(dir: 'Deps/jackson', include: '*.jar')
     implementation fileTree(dir: 'Deps/commons-csv', include: '*.jar')
+ 
 }
 
 sourceSets {

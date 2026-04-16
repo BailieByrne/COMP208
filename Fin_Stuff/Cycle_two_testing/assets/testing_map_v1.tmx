@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<map version="1.10" tiledversion="1.11.2" orientation="orthogonal" renderorder="right-down" width="30" height="20" tilewidth="16" tileheight="16" infinite="0" nextlayerid="3" nextobjectid="6">
+<map version="1.10" tiledversion="1.12.1" orientation="orthogonal" renderorder="right-down" width="30" height="20" tilewidth="16" tileheight="16" infinite="0" nextlayerid="4" nextobjectid="7">
  <editorsettings>
   <export target="testing_map_v1.json" format="json"/>
  </editorsettings>
@@ -16,8 +16,8 @@
 0,0,71,0,104,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 0,0,103,103,104,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,366,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,103,0,104,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,49,0,0,0,0,366,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,103,0,104,0,0,49,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 0,0,0,0,0,611,611,611,611,0,0,0,398,0,0,0,0,0,0,611,0,0,0,0,0,0,0,0,0,0,
 0,611,611,611,611,611,611,611,611,611,611,611,611,611,449,611,450,0,451,451,0,0,0,0,0,0,0,0,0,0,
 0,611,611,611,611,611,611,611,611,611,611,611,611,611,449,611,450,611,450,451,611,611,611,0,0,0,0,0,0,0,
@@ -28,7 +28,12 @@
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 </data>
  </layer>
- <objectgroup id="2" name="Object Layer 1">
-  <object id="1" name="PlayerSpawn" x="434.966" y="208.696"/>
+ <objectgroup id="3" name="Interactables">
+  <object id="6" name="mainSign" x="119" y="172.25">
+   <properties>
+    <property name="message" value="Welcome to the city!"/>
+    <property name="type" value="sign"/>
+   </properties>
+  </object>
  </objectgroup>
 </map>

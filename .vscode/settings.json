@@ -1,22 +1,24 @@
 {
-  "java.home": "C:\\Program Files (x86)\\Java\\JDK\\Oracle_JDK-23",
-  "java.jdt.ls.java.home": "C:\\Program Files (x86)\\Java\\JDK\\Oracle_JDK-23",
-  "java.configuration.runtimes": [
-    {
-      "name": "JavaSE-23",
-      "path": "C:\\Program Files (x86)\\Java\\JDK\\Oracle_JDK-23",
-      "default": true
-    }
-  ],
-  "java.project.sourcePaths": [
-    "Backend/Server",
-    "UI"
-  ],
-  "java.project.outputPath": "bin/classes",
-  "java.project.referencedLibraries": [
-    "c:/Users/pudma/Desktop/208/COMP208/Deps/javafx-sdk-17.0.18/lib/*.jar",
-    "lib/**/*.jar"
-  ],
-  "java.configuration.updateBuildConfiguration": "automatic",
-  "gradle.java.home": "C:\\Program Files (x86)\\Java\\JDK\\Oracle_JDK-23"
+    "java.home": "C:\\Program Files\\Java\\jdk-23",
+    "java.jdt.ls.java.home": "C:\\Program Files\\Java\\jdk-23",
+    "java.configuration.runtimes": [
+        {
+            "name": "JavaSE-23",
+            "path": "C:\\Program Files\\Java\\jdk-23",
+            "default": true
+        }
+    ],
+    "java.project.sourcePaths": [
+        "Fin_Stuff"
+    ],
+    "java.project.outputPath": "bin/classes",
+    "java.project.referencedLibraries": [
+        "c:/Users/pudma/Desktop/208/COMP208/Deps/javafx-sdk-17.0.18/lib/*.jar",
+        "lib/**/*.jar",
+        "Deps/jackson/jackson-annotations-2.17.0.jar",
+        "Deps/jackson/jackson-core-2.17.0.jar",
+        "Deps/jackson/jackson-databind-2.17.0.jar"
+    ],
+    "java.configuration.updateBuildConfiguration": "automatic",
+    "gradle.java.home": "C:\\Program Files\\Java\\jdk-23"
 }
