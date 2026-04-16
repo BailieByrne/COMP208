@@ -56,7 +56,7 @@ def run_simulation():
 
         log.write("\n" + "=" * 60 + "\n")
         log.write(f"Total runs: {runs}\n")
-        log.write(f"Total time: {total_time:.2f} seconds")
+        log.write(f"Total time: {total_time:.2f} seconds\n")
         log.write(f"Average time per run: {total_time/runs:.2f} seconds\n")
 
     print("\n" + "=" * 50)
