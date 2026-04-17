@@ -7,3 +7,4 @@
 **/*.db
 **/Logs
 .vscode/settings.json
+*.class

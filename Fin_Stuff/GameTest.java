@@ -21,14 +21,13 @@ public class GameTest extends JPanel implements ActionListener, KeyListener {
     // Define initial setup variables here
     private final String STARTING_MAP = "Fin_Stuff/Cycle_two_testing/assets/testing_map_v1.json";
     private final String TILESET_PATH = "Fin_Stuff/Cycle_two_testing/assets/CP_V1.1.0_nyknck/CP_V1.1.0_nyknck/CP_V1.0.4_nyknck/CP_V1.0.4.png";
-
+    //TODO: When moved to final version these relative paths must be changed 
     public GameTest() {
         setFocusable(true);
         addKeyListener(this); // Listen to keyboard inputs
 
-        // FIXED: Using ImageIcon forces Java to load the image immediately
-        tilesetImage = new ImageIcon(TILESET_PATH).getImage();
-        
+        //Using ImageIcon forces Java to load the image immediately
+        tilesetImage = new ImageIcon(getClass().getResource("/" + TILESET_PATH)).getImage();        
         loadMap(STARTING_MAP); // Load first map automatically
 
         timer = new Timer(16, this); 
@@ -38,7 +37,10 @@ public class GameTest extends JPanel implements ActionListener, KeyListener {
     public void loadMap(String filePath) {
         try {
             ObjectMapper mapper = new ObjectMapper();
-            JsonNode root = mapper.readTree(new File(filePath));
+
+            java.io.InputStream mapStream = getClass().getResourceAsStream("/" + filePath);
+
+            JsonNode root = mapper.readTree(mapStream);
 
             mapWidth = root.get("width").asInt();
             mapHeight = root.get("height").asInt();
