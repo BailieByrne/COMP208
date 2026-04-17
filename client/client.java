@@ -1,4 +1,5 @@
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
@@ -91,7 +92,7 @@ public class client extends Application {
 
     public void showCycle1Screen() {
         try {
-            FXMLLoader loader = new FXMLLoader(getClass().getResource("Assets/COMP208GameUI.fxml"));
+            FXMLLoader loader = new FXMLLoader(new File("client/Assets/COMP208GameUI.fxml").toURI().toURL());
             Parent root = loader.load();
             gameUIController = loader.getController();
             if (gameUIController != null) {
@@ -110,7 +111,7 @@ public class client extends Application {
     public void showCycle2Screen() {
         Platform.runLater(() -> {
             try {
-                FXMLLoader loader = new FXMLLoader(getClass().getResource("Assets/Cycle2Placeholder.fxml"));
+                FXMLLoader loader = new FXMLLoader(new File("client/Assets/Cycle2Placeholder.fxml").toURI().toURL());
                 Parent root = loader.load();
                 cycle2Controller = loader.getController();
                 primaryStage.setTitle("COMP208 - Cycle 2");

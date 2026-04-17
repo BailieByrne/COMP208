@@ -255,6 +255,12 @@ public class GameUIController {
         }
     }
 
+    private void trimSeries(XYChart.Series<Number, Number> series) {
+        if (series.getData().size() > MAX_POINTS) {
+            series.getData().remove(0, series.getData().size() - MAX_POINTS);
+        }
+    }
+
     private void updateYAxis(double latestPrice) {
         highestPriceSeen = Math.max(highestPriceSeen, latestPrice);
         if (ChartUserYAxis != null) {

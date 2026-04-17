@@ -1,13 +1,15 @@
 plugins {
     id 'java'
+    id 'application'
+    id 'org.openjfx.javafxplugin' version '0.1.0'
 }
 
 group = 'com.stock'
 version = '1.0'
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
 }
 
 wrapper {
@@ -15,11 +17,16 @@ wrapper {
 }
 
 repositories {
+    mavenCentral()
+}
+
+javafx {
+    version = '21.0.5'
+    modules = ['javafx.controls', 'javafx.fxml', 'javafx.graphics']
 }
 
 dependencies {
-    // Using local JavaFX SDK from Deps folder
-    implementation fileTree(dir: 'Deps/javafx-sdk-17.0.18/lib', include: '*.jar')
+    // Local deps
     implementation fileTree(dir: 'Deps/sqlite', include: '*.jar')
     implementation fileTree(dir: 'Deps/jackson', include: '*.jar')
     implementation fileTree(dir: 'Deps/commons-csv', include: '*.jar')
@@ -36,6 +43,10 @@ sourceSets {
     }
 }
 
-tasks.named('compileJava') {
+application {
+    mainClass = 'client'
+}
+
+tasks.withType(JavaCompile) {
     options.encoding = 'UTF-8'
 }
