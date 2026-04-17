@@ -39,7 +39,7 @@ public class GameTest extends JPanel implements ActionListener, KeyListener {
         try {
             ObjectMapper mapper = new ObjectMapper();
 
-     JsonNode root = mapper.readTree(new File(filePath));
+        JsonNode root = mapper.readTree(new File(filePath));
 
             mapWidth = root.get("width").asInt();
             mapHeight = root.get("height").asInt();

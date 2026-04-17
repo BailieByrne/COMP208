@@ -6,8 +6,11 @@ import java.awt.Color;
 public class Player {
     public int x = 100; 
     public int y = 100; 
+    
+    // The visual size! 16 * 1.4 (40% bigger) = ~22
+    public int drawSize = 22; 
 
-    // 1. The 8 Image Assets (4 directions, 2 frames each)
+    // 1. The 8 Image Assets
     private Image upStand, upStep;
     private Image downStand, downStep;
     private Image leftStand, leftStep;
@@ -18,11 +21,12 @@ public class Player {
     private int lastY = y;
     private int animCounter = 0;
     private boolean isStepping = false;
-    private String currentDirection = "DOWN"; // Face the camera by default
+    private String currentDirection = "DOWN"; 
+    
+    // NEW: The "Grace Period" tracker to fix the stuttering animation
+    private int framesSinceLastMove = 100; 
 
     public Player() {
-        // Load all 8 PNGs here! 
-        // Just make sure these filenames exactly match the ones in your assets folder.
         upStand = new ImageIcon("Fin_Stuff/Cycle_two_testing/assets/up_stand.png").getImage();
         upStep = new ImageIcon("Fin_Stuff/Cycle_two_testing/assets/up_step.png").getImage();
         
@@ -37,63 +41,64 @@ public class Player {
     }
 
     public boolean canMove(int nextX, int nextY, int[][] mapGrid) {
-        // Keep your collision code here exactly as you had it!
+        // Keep your collision code here!
         return true; 
     }
 
     public void draw(Graphics g) {
-        // 3. Check if we moved since the last frame
-        boolean isMoving = (x != lastX || y != lastY);
-
-        if (isMoving) {
-            // 4. Figure out WHICH WAY we moved by comparing current X/Y to old X/Y
+        // 3. Did we physically move THIS exact frame?
+        if (x != lastX || y != lastY) {
+            framesSinceLastMove = 0; // Reset our idle timer!
+            
+            // Figure out WHICH WAY we moved
             if (x > lastX) currentDirection = "RIGHT";
             else if (x < lastX) currentDirection = "LEFT";
             else if (y > lastY) currentDirection = "DOWN";
             else if (y < lastY) currentDirection = "UP";
+        } else {
+            framesSinceLastMove++; // Tick up the idle timer
+        }
 
+        // 4. The Grace Period: Keep animating if we moved very recently
+        if (framesSinceLastMove < 5) {
             animCounter++;
             
-            // The Speed Limit: Swap frames every 10 ticks
+            // The Speed Limit: Swap frames every 10 ticks (Increase this to slow down the walk speed!)
             if (animCounter > 10) {
-                isStepping = !isStepping; // Flip between true/false
-                animCounter = 0;          // Reset the clock
+                isStepping = !isStepping; 
+                animCounter = 0;          
             }
         } else {
-            // If standing still, force the standing frame and reset the clock
+            // We have DEFINITELY stopped moving, freeze the animation
             isStepping = false;
             animCounter = 0;
         }
 
-        // 5. Save our current position to check against next time
+        // Save our position for the next frame's math
         lastX = x;
         lastY = y;
 
-        // 6. Pick the exact frame based on our Direction AND Stepping state
+        // Pick the exact frame based on Direction and Stepping state
         Image currentFrame = null;
-        
         switch (currentDirection) {
-            case "UP":
-                currentFrame = isStepping ? upStep : upStand;
-                break;
-            case "DOWN":
-                currentFrame = isStepping ? downStep : downStand;
-                break;
-            case "LEFT":
-                currentFrame = isStepping ? leftStep : leftStand;
-                break;
-            case "RIGHT":
-                currentFrame = isStepping ? rightStep : rightStand;
-                break;
+            case "UP": currentFrame = isStepping ? upStep : upStand; break;
+            case "DOWN": currentFrame = isStepping ? downStep : downStand; break;
+            case "LEFT": currentFrame = isStepping ? leftStep : leftStand; break;
+            case "RIGHT": currentFrame = isStepping ? rightStep : rightStand; break;
         }
 
-        // 7. Draw the chosen frame!
+        // 5. Draw it! Notice we use 'drawSize' now so it is 40% bigger
         if (currentFrame != null && currentFrame.getWidth(null) > 0) {
-            g.drawImage(currentFrame, x, y, 16, 16, null);
+            
+            // Optional pro-tip: we offset the drawing slightly so the character's feet 
+            // stay in the same place even though the image is bigger!
+            int drawX = x - ((drawSize - 16) / 2);
+            int drawY = y - (drawSize - 16); 
+            
+            g.drawImage(currentFrame, drawX, drawY, drawSize, drawSize, null);
         } else {
-            // Fallback red square just in case a file path is typed wrong
             g.setColor(Color.RED);
-            g.fillRect(x, y, 16, 16);
+            g.fillRect(x, y, drawSize, drawSize);
         }
     }
 }
