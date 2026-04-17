@@ -92,7 +92,7 @@ public class client extends Application {
 
     public void showCycle1Screen() {
         try {
-            FXMLLoader loader = new FXMLLoader(new File("client/Assets/COMP208GameUI.fxml").toURI().toURL());
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("Assets/COMP208GameUI.fxml"));
             Parent root = loader.load();
             gameUIController = loader.getController();
             if (gameUIController != null) {
