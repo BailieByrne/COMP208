@@ -27,7 +27,8 @@ public class GameTest extends JPanel implements ActionListener, KeyListener {
         addKeyListener(this); // Listen to keyboard inputs
 
         //Using ImageIcon forces Java to load the image immediately
-        tilesetImage = new ImageIcon(getClass().getResource("/" + TILESET_PATH)).getImage();        
+        tilesetImage    = new ImageIcon(TILESET_PATH).getImage();     
+     
         loadMap(STARTING_MAP); // Load first map automatically
 
         timer = new Timer(16, this); 
@@ -38,9 +39,7 @@ public class GameTest extends JPanel implements ActionListener, KeyListener {
         try {
             ObjectMapper mapper = new ObjectMapper();
 
-            java.io.InputStream mapStream = getClass().getResourceAsStream("/" + filePath);
-
-            JsonNode root = mapper.readTree(mapStream);
+     JsonNode root = mapper.readTree(new File(filePath));
 
             mapWidth = root.get("width").asInt();
             mapHeight = root.get("height").asInt();
