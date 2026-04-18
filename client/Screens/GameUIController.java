@@ -4,12 +4,17 @@ import java.util.List;
 import java.util.Map;
 
 import javafx.application.Platform;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.scene.chart.LineChart;
 import javafx.scene.chart.NumberAxis;
 import javafx.scene.chart.XYChart;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.TableColumn;
+import javafx.scene.control.TableView;
+import javafx.scene.control.cell.PropertyValueFactory;
 
 public class GameUIController {
     @FXML private Label labelDay;
@@ -23,15 +28,27 @@ public class GameUIController {
     @FXML private NumberAxis ChartUserYAxis;
     @FXML private NumberAxis ChartAIYAxis;
     @FXML private ComboBox<String> comboTicker;
+    @FXML private ComboBox<String> comboQty;
+    @FXML private TableView<PortfolioItem> tableHoldings;
+    @FXML private TableColumn<PortfolioItem, String> colTicker;
+    @FXML private TableColumn<PortfolioItem, Integer> colQty;
+    @FXML private TableColumn<PortfolioItem, String> colValue;
+    @FXML private javafx.scene.control.Button btnBuy;
+    @FXML private javafx.scene.control.Button btnSell;
+    @FXML private javafx.scene.control.Button btnSellAll;
+    @FXML private Label lblDebugInfo;
 
     // Support multiple tickers
     private final Map<String, XYChart.Series<Number, Number>> tickerSeries = new HashMap<>();
     private final Map<String, XYChart.Series<Number, Number>> aiTickerSeries = new HashMap<>();
+    private final Map<String, Double> lastPricePerTicker = new java.util.concurrent.ConcurrentHashMap<>();
     private final List<String> tickerOrder = new ArrayList<>();
     private String currentTicker = null;
     private double highestPriceSeen = 0.0;
     private double highestAIPriceSeen = 0.0;
     private static final int MAX_POINTS = 510;  // Full trading day
+    private double currentPrice = 0.0;  // Track current price for buy/sell
+    private double playerCash = 10000.0;  // Track player cash for max calculation
 
     //Inits the cycle1 screen and chart data
     @FXML
@@ -97,6 +114,53 @@ public class GameUIController {
         if (labelNetWorth != null) {
             labelNetWorth.setText("Net Worth: £0.00");
         }
+
+        // Initialize portfolio table
+        if (tableHoldings != null) {
+            if (colTicker != null) {
+                colTicker.setCellValueFactory(new PropertyValueFactory<>("ticker"));
+            }
+            if (colQty != null) {
+                colQty.setCellValueFactory(new PropertyValueFactory<>("quantity"));
+            }
+            if (colValue != null) {
+                colValue.setCellValueFactory(new PropertyValueFactory<>("value"));
+            }
+            tableHoldings.setItems(FXCollections.observableArrayList());
+        }
+
+        // Initialize buy/sell buttons
+        if (btnBuy != null) {
+            btnBuy.setOnAction(e -> onBuyClicked());
+        }
+        if (btnSell != null) {
+            btnSell.setOnAction(e -> onSellClicked());
+        }
+        if (btnSellAll != null) {
+            btnSellAll.setOnAction(e -> onSellAllClicked());
+        }
+
+        // Initialize quantity combo box with options: 1, 5, 10, max
+        if (comboQty != null) {
+            comboQty.setItems(FXCollections.observableArrayList("1", "5", "10", "max"));
+            comboQty.setValue("1");  // Default to 1
+        }
+
+        // Initialize table with all available stocks at 0 quantity
+        initializeStocksTable();
+    }
+
+    private void initializeStocksTable() {
+        if (tableHoldings == null) return;
+        
+        String[] stocks = {"AAPL", "TSLA", "GOOGL", "NVDA", "AMZN"};
+        ObservableList<PortfolioItem> items = FXCollections.observableArrayList();
+        
+        for (String ticker : stocks) {
+            items.add(new PortfolioItem(ticker, 0, "£0.00"));
+        }
+        
+        tableHoldings.setItems(items);
     }
 
     public void setConnectionStatus(String text) {
@@ -105,6 +169,14 @@ public class GameUIController {
                 labelTime.setText(text);
             }
         });
+    }
+
+    /**
+     * Update price data from server - called when PRICE_UPDATE packet arrives
+     * Formats: ticker (e.g., "AAPL"), price (double), point (int from 5 to 510)
+     */
+    public void updatePriceData(String ticker, double price, int point) {
+        handlePricePacket(ticker, price, point, "PRICE_UPDATE|" + ticker + "|" + price + "|" + point);
     }
 
     public void handlePricePacket(String ticker, double price, int time, String rawPacket) {
@@ -142,6 +214,10 @@ public class GameUIController {
             XYChart.Series<Number, Number> series = tickerSeries.get(displayTicker);
             series.getData().add(new XYChart.Data<>((double) time, price));
             trimSeries(series);
+            
+            // Track latest price for this ticker (used in portfolio display)
+            lastPricePerTicker.put(displayTicker, price);
+            updatePortfolioWithLatestPrices();
 
             // Update chart if this is the current ticker
             if (displayTicker.equals(currentTicker)) {
@@ -155,6 +231,7 @@ public class GameUIController {
                     ChartUser.getData().add(renderSeries);
                     ChartUser.setTitle("Live Price Feed - " + displayTicker);
                 }
+                currentPrice = price;  // Store current price for buy/sell
                 updateYAxis(price);
             }
 
@@ -165,11 +242,9 @@ public class GameUIController {
             if (labelTime != null) {
                 labelTime.setText("Current ticker: " + displayTicker + " price: £" + String.format("%.2f", price));
             }
-            if (lblCash != null) {
-                lblCash.setText("Price: £" + String.format("%.2f", price));
-            }
-            if (labelNetWorth != null) {
-                labelNetWorth.setText("Points: " + series.getData().size());
+            // Update debug info at bottom right (not cash/networth)
+            if (lblDebugInfo != null) {
+                lblDebugInfo.setText("Price: £" + String.format("%.2f", price) + " | Points: " + series.getData().size());
             }
         });
     }
@@ -284,5 +359,251 @@ public class GameUIController {
         } else {
             Platform.runLater(action);
         }
+    }
+
+    /**
+     * Trim a data series to prevent unbounded memory growth.
+     * 
+     * Removes oldest data points from the series when it exceeds MAX_POINTS.
+     * This keeps the chart responsive and memory usage bounded during long play sessions.
+     * 
+     * @param series The XYChart.Series to trim
+     */
+    private void trimSeries(XYChart.Series<Number, Number> series) {
+        while (series.getData().size() > MAX_POINTS) {
+            series.getData().remove(0);
+        }
+    }
+
+    // show coffee powerup countdown timer in UI
+    public void showPowerupTimer(String name, long durationMs) {
+        long endTime = System.currentTimeMillis() + durationMs;
+        Thread timerThread = new Thread(() -> {
+            while (System.currentTimeMillis() < endTime) {
+                long remaining = Math.max(0, endTime - System.currentTimeMillis());
+                long seconds = remaining / 1000;
+                Platform.runLater(() -> {
+                    if (labelTime != null) {
+                        labelTime.setText("Coffee: " + seconds + "s");
+                    }
+                });
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    break;
+                }
+            }
+            // timer expired, reset label
+            Platform.runLater(() -> {
+                if (labelTime != null) {
+                    labelTime.setText("");
+                }
+            });
+        });
+        timerThread.setDaemon(true);
+        timerThread.start();
+    }
+
+    /**
+     * Update portfolio display with cash and holdings
+     * Format: PORTFOLIO_UPDATE|cash|ticker1:qty1:price1|ticker2:qty2:price2|...
+     */
+    /**
+     * Update portfolio with latest prices from price updates
+     */
+    private void updatePortfolioWithLatestPrices() {
+        runOnFxThread(() -> {
+            if (tableHoldings == null) return;
+            
+            double totalValue = 0.0;
+            double cashAmount = playerCash;
+            
+            // Update each row with latest price
+            for (PortfolioItem item : tableHoldings.getItems()) {
+                double latestPrice = lastPricePerTicker.getOrDefault(item.ticker, 0.0);
+                double itemValue = item.quantity * latestPrice;
+                totalValue += itemValue;
+                item.value = String.format("£%.2f", itemValue);
+            }
+            
+            tableHoldings.refresh();
+            
+            // Update net worth with latest prices
+            if (labelNetWorth != null) {
+                double netWorth = cashAmount + totalValue;
+                labelNetWorth.setText("Net Worth: £" + String.format("%.2f", netWorth));
+            }
+        });
+    }
+
+    public void updatePortfolio(String cash, List<PortfolioEntry> holdings) {
+        runOnFxThread(() -> {
+            // Update cash label and track player cash
+            if (lblCash != null) {
+                try {
+                    double cashAmount = Double.parseDouble(cash);
+                    this.playerCash = cashAmount;  // Store for max calculation
+                    lblCash.setText("Cash: £" + String.format("%.2f", cashAmount));
+                } catch (NumberFormatException e) {
+                    lblCash.setText("Cash: £" + cash);
+                }
+            }
+
+            // Update holdings table
+            if (tableHoldings != null) {
+                ObservableList<PortfolioItem> items = FXCollections.observableArrayList();
+                double totalValue = 0.0;
+
+                if (holdings != null) {
+                    for (PortfolioEntry entry : holdings) {
+                        // Use server's price if available, otherwise use last streamed price
+                        double price = entry.currentPrice > 0 ? entry.currentPrice : lastPricePerTicker.getOrDefault(entry.ticker, 0.0);
+                        lastPricePerTicker.put(entry.ticker, price);  // Store for future updates
+                        double value = entry.quantity * price;
+                        totalValue += value;
+                        items.add(new PortfolioItem(
+                            entry.ticker,
+                            entry.quantity,
+                            String.format("£%.2f", value)
+                        ));
+                    }
+                }
+
+                tableHoldings.setItems(items);
+
+                // Update net worth
+                if (labelNetWorth != null) {
+                    try {
+                        double cashAmount = Double.parseDouble(cash);
+                        double netWorth = cashAmount + totalValue;
+                        labelNetWorth.setText("Net Worth: £" + String.format("%.2f", netWorth));
+                    } catch (NumberFormatException e) {
+                        labelNetWorth.setText("Net Worth: £" + String.format("%.2f", totalValue));
+                    }
+                }
+            }
+        });
+    }
+
+    private void onBuyClicked() {
+        if (comboTicker == null || comboTicker.getValue() == null) {
+            labelTime.setText("Please select a ticker");
+            return;
+        }
+        if (comboQty == null || comboQty.getValue() == null) {
+            labelTime.setText("Please select a quantity");
+            return;
+        }
+        
+        String ticker = comboTicker.getValue();
+        String qtyStr = comboQty.getValue();
+        int quantity;
+        
+        if ("max".equals(qtyStr)) {
+            // Calculate max: floor(playerCash / currentPrice)
+            if (currentPrice <= 0) {
+                labelTime.setText("Invalid price");
+                return;
+            }
+            quantity = (int) (playerCash / currentPrice);
+        } else {
+            quantity = Integer.parseInt(qtyStr);
+        }
+        
+        if (quantity <= 0) {
+            labelTime.setText("Insufficient cash to buy");
+            return;
+        }
+        
+        // Send BUY packet to server: BUY|ticker|quantity|price
+        client.getInstance().requestBuy(ticker, quantity, currentPrice);
+    }
+
+    private void onSellClicked() {
+        if (comboTicker == null || comboTicker.getValue() == null) {
+            labelTime.setText("Please select a ticker");
+            return;
+        }
+        if (comboQty == null || comboQty.getValue() == null) {
+            labelTime.setText("Please select a quantity");
+            return;
+        }
+        
+        String ticker = comboTicker.getValue();
+        String qtyStr = comboQty.getValue();
+        int quantity;
+        
+        if ("max".equals(qtyStr)) {
+            // Get current holding from table
+            int maxHolding = 0;
+            for (PortfolioItem item : tableHoldings.getItems()) {
+                if (item.ticker.equals(ticker)) {
+                    maxHolding = item.quantity;
+                    break;
+                }
+            }
+            quantity = maxHolding;
+        } else {
+            quantity = Integer.parseInt(qtyStr);
+        }
+        
+        if (quantity <= 0) {
+            labelTime.setText("No holdings to sell");
+            return;
+        }
+        
+        // Send SELL packet to server: SELL|ticker|quantity|price
+        client.getInstance().requestSell(ticker, quantity, currentPrice);
+    }
+
+    private void onSellAllClicked() {
+        if (comboTicker == null || comboTicker.getValue() == null) {
+            labelTime.setText("Please select a ticker");
+            return;
+        }
+        
+        String ticker = comboTicker.getValue();
+        
+        // Send SELL_ALL packet to server: SELL_ALL|ticker|price
+        client.getInstance().requestSellAll(ticker, currentPrice);
+    }
+
+    /**
+     * Data class for portfolio entries sent from server
+     */
+    public static class PortfolioEntry {
+        public String ticker;
+        public int quantity;
+        public double currentPrice;
+
+        public PortfolioEntry(String ticker, int quantity, double currentPrice) {
+            this.ticker = ticker;
+            this.quantity = quantity;
+            this.currentPrice = currentPrice;
+        }
+    }
+
+    /**
+     * Data class for table display
+     */
+    public static class PortfolioItem {
+        private String ticker;
+        private int quantity;
+        private String value;
+
+        public PortfolioItem(String ticker, int quantity, String value) {
+            this.ticker = ticker;
+            this.quantity = quantity;
+            this.value = value;
+        }
+
+        public String getTicker() { return ticker; }
+        public void setTicker(String ticker) { this.ticker = ticker; }
+
+        public int getQuantity() { return quantity; }
+        public void setQuantity(int quantity) { this.quantity = quantity; }
+
+        public String getValue() { return value; }
+        public void setValue(String value) { this.value = value; }
     }
 }

@@ -1,805 +1,844 @@
-// ServerController.java  main server loop, client handling, game state management
-//Move these imports
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.net.InetAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.net.SocketException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.io.*;
+import java.net.*;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.UUID;
 
-//Extends runnable for thread handling
-public class ServerController implements Runnable {
+/**
+ * Main server controller listens for client connections and manages game sessions
+ */
+public class ServerController {
     private static final int PORT = 5000;
-    private static final String HOST = "127.0.0.1";
-    private static final int LOBBY_SECONDS = 5;
-    private static final long CYCLE2_DURATION_MS = 15_000;
-    private static final int DEFAULT_STEP = 5;
-    private static final int POWERUP_STEP = 1;
-
-    //Builds the CPP if it cant find the EXE, need to add a flag here for mac compat in the future
-    private static final String BUILD_EXECUTABLE = ".\\build\\bin\\Release\\stock_sim.exe";
-    private static final String BUILD_FALLBACK = "cmake --build build --config Release";
-
-    //Data Strcutures
-    private final List<ClientSession> sessions = new ArrayList<>();
-    private final Map<Integer, ClientState> clientStates = new HashMap<>();
-    private final DBManager dbManager = new DBManager("DB/main.db");
-    private final AuthService authService = new AuthService(dbManager);
-
+    private static ServerController instance;
     private ServerSocket serverSocket;
-    private volatile boolean running = true;
-    private volatile boolean lobbyStarted = false;
-    private volatile boolean marketLoopStarted = false;
-    private volatile boolean gameSessionRunning = false;
-    private int nextClientId = 0;
-    private ScheduledExecutorService gameScheduler;
+    private Map<Integer, ClientHandler> connectedClients = new ConcurrentHashMap<>();
+    private DBHandler dbHandler;
+    private ExecutorService threadPool;
 
-    // game state bits uses defaults
-    private int currentDay = 1;  // 1-5
-    private int currentDayLoopCount = 0;  // 0-3 for cycles, then cycle1 on day 5
-    private String currentTicker = "AAPL";
-    private final List<String> availableTickers = new ArrayList<>();
-    private DBManager.GameState gameState = null;
-    private CycleOneEngine cycleOne;
-    private CycleTwoEngine cycleTwo = new CycleTwoEngine(CYCLE2_DURATION_MS);
-    private String activeCycle = "";  // Empty until day starts
-    private double cycle1HighPrice = 0;
-    private double cycle1LowPrice = Double.MAX_VALUE;
-    private double cycle1OpenPrice = 0;
-    private double cycle1ClosePrice = 0;
-
-    //Logging with timestamps
-    private void log(String message) {
-        String timestamp = new SimpleDateFormat("HH:mm:ss").format(new Date());
-        System.out.println("[" + timestamp + "] " + message);
+    private ServerController() {
+        dbHandler = DBHandler.getInstance();
+        threadPool = Executors.newCachedThreadPool();
     }
 
-    //Main RUN loop for server, accepts clients and starts lobby/game loops
-    @Override
-    public void run() {
+    //Singleton to get servercontroller, synchronised to avoid multiple 
+    public static synchronized ServerController getInstance() {
+        if (instance == null) {
+            instance = new ServerController();
+        }
+        return instance;
+    }
+
+    /**
+     * Start the server and listen for client connections
+     */
+    public void start() {
         try {
-            serverSocket = new ServerSocket(PORT, 50, InetAddress.getByName(HOST));
-            log("Server listening on " + HOST + ":" + PORT);
+            serverSocket = new ServerSocket(PORT);
+            System.out.println("Server started on port " + PORT);
 
-            while (running) {
-                try {
-                    Socket socket = serverSocket.accept();
-                    ClientSession session = new ClientSession(nextClientId++, socket);
-                    clientStates.put(session.clientId, new ClientState(session.clientId));
+            //Loop to handle connections
+            while (true) {
+                Socket clientSocket = serverSocket.accept();
+                System.out.println("New client connected from " + clientSocket.getInetAddress());
 
-                    synchronized (sessions) {
-                        sessions.add(session);
-                    }
-
-                    log("CLIENT CONNECTED: id=" + session.clientId + " " + session.clientIp + ":" + socket.getPort());
-
-                    Thread clientReader = new Thread(() -> handleClientMessages(session));
-                    clientReader.setDaemon(true);
-                    clientReader.start();
-
-                } catch (SocketException e) {
-                    if (running) {
-                        log("Socket error: " + e.getMessage());
-                    }
-                }
+                // Handle each client in a separate thread
+                ClientHandler handler = new ClientHandler(clientSocket, this);
+                threadPool.execute(handler);
             }
         } catch (IOException e) {
-            log("Server error: " + e.getMessage());
+            System.err.println("Server error: " + e.getMessage());
         }
     }
 
-    private void startLobbyIfNeeded() {
-        if (lobbyStarted) {
-            return;
-        }
-        lobbyStarted = true;
+    /**
+     * Register a connected client
+     */
+    public void registerClient(int userId, ClientHandler handler) {
+        connectedClients.put(userId, handler);
+        System.out.println("Client registered: User ID " + userId);
+    }
 
-        Thread lobbyThread = new Thread(() -> {
+    /**
+     * Unregister a disconnected client
+     */
+    public void unregisterClient(int userId) {
+        connectedClients.remove(userId);
+        System.out.println("Client unregistered: User ID " + userId);
+    }
+
+    /**
+     * Get a client handler by user ID
+     */
+    public ClientHandler getClient(int userId) {
+        return connectedClients.get(userId);
+    }
+
+
+    /**
+     * main func to handle starting the servber controller and begining the start()
+     * @param args
+     */
+    public static void main(String[] args) {
+        ServerController server = ServerController.getInstance();
+        server.start();
+    }
+
+    /**
+     * Inner class to handle individual client connections
+     */
+    private static class ClientHandler implements Runnable {
+        private Socket socket;
+        private PrintWriter out;
+        private BufferedReader in;
+        private ServerController server;
+        private int userId = -1;
+        private int gameId = -1;
+        private int currentDay = 1;
+        private int difficulty = 1;
+        private final Map<String, Double> lastPricePerTicker = new java.util.concurrent.ConcurrentHashMap<>();
+
+        public ClientHandler(Socket socket, ServerController server) {
+            this.socket = socket;
+            this.server = server;
+        }
+
+        @Override
+        public void run() {
             try {
-                log("Lobby opened. Starting game in " + LOBBY_SECONDS + " seconds...");
-                Thread.sleep(LOBBY_SECONDS * 1000L);
+                /**
+                 * Setup the input and output buffers to write to client
+                 */
+                out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), "UTF-8"), true);
+                in = new BufferedReader(new InputStreamReader(socket.getInputStream(), "UTF-8"));
+                //Func to listen for packets
+                listenForPackets();
+            } catch (IOException e) {
+                System.err.println("Client connection error: " + e.getMessage());
+            } finally {
+                disconnect();
+            }
+        }
+
+        /**
+         * Listen for incoming packets from client
+         */
+        private void listenForPackets() {
+            try {
+                String packet;
+                while ((packet = in.readLine()) != null) {
+                    /**
+                     * TODO:
+                     * HANDLE TCP + CHECKSUM HERE
+                     */
+                    //Handles packet here
+                    handlePacket(packet);
+                }
+            } catch (IOException e) {
+                System.err.println("Connection lost: " + e.getMessage());
+            }
+        }
+
+        /**
+         * Handle incoming packets from client
+         */
+        private void handlePacket(String packet) {
+            if (packet == null || packet.isEmpty()) return;
+
+            String[] parts = packet.split("\\|");
+            String packetType = parts[0];
+
+            /**
+             * Switch case for recognised packet types
+             */
+            try {
+                switch (packetType) {
+                    case "LOGIN":
+                        handleLogin(parts);
+                        break;
+                    case "SIGNUP":
+                        handleSignup(parts);
+                        break;
+                    case "START_GAME":
+                        handleStartGame(parts);
+                        break;
+                    case "RESUME_GAME":
+                        handleResumeGame(parts);
+                        break;
+                    case "BUY":
+                        handleBuy(parts);
+                        break;
+                    case "SELL":
+                        handleSell(parts);
+                        break;
+                    case "SELL_ALL":
+                        handleSellAll(parts);
+                        break;
+                    default:
+                        System.out.println("Unknown packet type: " + packetType);
+                }
+            } catch (Exception e) {
+                System.err.println("Error handling packet: " + e.getMessage());
+            }
+        }
+
+        /**
+         * Handle LOGIN packet
+         * Format: LOGIN|username|password
+         */
+        private void handleLogin(String[] parts) {
+            if (parts.length < 3) {
+                sendPacket("LOGIN_FAILED|Invalid packet format");
+                return;
+            }
+            String username = parts[1];
+            String password = parts[2];
+            // Validate login via DBHandler
+            int validatedUserId = server.dbHandler.validateLogin(username, password);
+            if (validatedUserId != -1) {
+                userId = validatedUserId;
+                server.registerClient(userId, this);
+                sendPacket("LOGIN_SUCCESS|" + username);
+
+                // Check for active games
+                List<Map<String, Object>> activeGames = server.dbHandler.getActiveGames(userId);
+                if (!activeGames.isEmpty()) {
+                    sendPacket("ACTIVE_GAMES|" + activeGames.size());
+                    for (Map<String, Object> game : activeGames) {
+                        String gameInfo = "GAME_INFO|" +
+                                game.get("game_id") + "|" +
+                                game.get("difficulty") + "|" +
+                                game.get("current_day") + "|" +
+                                game.get("player_cash") + "|" +
+                                game.get("ai_cash");
+                        sendPacket(gameInfo);
+                    }
+                }
+            } else {
+                //Sends the error packet
+                sendPacket("LOGIN_FAILED|Invalid username or password");
+            }
+        }
+
+        /**
+         * Handle SIGNUP packet
+         * Format: SIGNUP|username|password
+         */
+        private void handleSignup(String[] parts) {
+            if (parts.length < 3) {
+                sendPacket("SIGNUP_FAILED|Invalid packet format");
+                return;
+            }
+
+            String username = parts[1];
+            String password = parts[2];
+
+            // Create new user via DBHandler
+            int newUserId = server.dbHandler.createUser(username, password);
+
+            if (newUserId != -1) {
+                userId = newUserId;
+                server.registerClient(userId, this);
+                sendPacket("SIGNUP_SUCCESS|" + username);
+            } else {
+                sendPacket("SIGNUP_FAILED|Username already exists or error creating user");
+            }
+        }
+
+        /**
+         * Handle START_GAME packet
+         * Format: START_GAME|difficulty
+         */
+        private void handleStartGame(String[] parts) {
+            if (userId == -1) {
+                sendPacket("ERROR|Not authenticated");
+                return;
+            }
+
+            if (parts.length < 2) {
+                sendPacket("ERROR|Invalid packet format");
+                return;
+            }
+
+            try {
+                int difficulty = Integer.parseInt(parts[1]);
+                this.difficulty = difficulty; // Store for use in streamGamePrices
+
+                // Create new game in database
+                int gameId = server.dbHandler.createGame(userId, difficulty);
+
+                if (gameId != -1) {
+                    // Store gameId in handler
+                    this.gameId = gameId;
+                    this.currentDay = 1; // Reset to day 1
+                    
+                    // Delete any other active games for this user
+                    server.dbHandler.deleteOtherActiveGames(userId, gameId);
+
+                    // Get AAPL stock ID (always Day 1 stock) - verify it exists
+                    int aaplStockId = server.dbHandler.getStockId("AAPL");
+                    if (aaplStockId != -1) {
+                        // Send game start packet
+                        sendPacket("GAME_START|" + gameId + "|" + difficulty);
+                        sendPacket("PHASE|CYCLE_1");
+                        sendPortfolioUpdate();
+                        
+                        // Send initial portfolio with starting cash
+                        
+                        
+                        // Start streaming prices in background thread (handles all generation and DB updates)
+                        new Thread(() -> streamGamePrices(gameId, "AAPL")).start();
+                    } else {
+                        sendPacket("ERROR|Stock not found");
+                    }
+                } else {
+                    sendPacket("ERROR|Failed to create game");
+                }
+            } catch (NumberFormatException e) {
+                sendPacket("ERROR|Invalid difficulty");
+            }
+        }
+
+        /**
+         * Handle RESUME_GAME packet
+         * Format: RESUME_GAME
+         */
+        private void handleResumeGame(String[] parts) {
+            if (userId == -1) {
+                sendPacket("ERROR|Not authenticated");
+                return;
+            }
+
+            // Get first active game, add the multiplayer conn here
+            List<Map<String, Object>> activeGames = server.dbHandler.getActiveGames(userId);
+
+            if (!activeGames.isEmpty()) {
+                Map<String, Object> game = activeGames.get(0);
+                int gameId = (Integer) game.get("game_id");
+                String difficultyStr = (String) game.get("difficulty");
+                int resumeDifficulty = Integer.parseInt(difficultyStr);
+                int resumeDay = (Integer) game.get("current_day");
+
+                this.gameId = gameId;
+                this.difficulty = resumeDifficulty;
+                this.currentDay = resumeDay;
+
+                sendPacket("GAME_RESUMED|" + gameId + "|" + resumeDifficulty + "|" + resumeDay);
                 
-                // Initialize game from DB or create new
-                if (!initializeGame()) {
-                    log("ERROR: Failed to initialize game");
+                // Send initial portfolio
+                sendPortfolioUpdate();
+                
+                // Resume price streaming from current day
+                new Thread(() -> streamGamePrices(gameId, null)).start();
+
+            } else {
+                sendPacket("ERROR|No active game found");
+            }
+        }
+
+
+        /**
+         * Handles BUY packets and has guard for malformed packets and incorr gameIDS
+         */
+        private void handleBuy(String[] parts) {
+            if (gameId == -1) {
+                sendPacket("ERROR|No active game");
+                return;
+            }
+            if (parts.length < 4) {
+                sendPacket("ERROR|Invalid BUY packet format");
+                return;
+            }
+
+            try {
+                String ticker = parts[1];
+                int quantity = Integer.parseInt(parts[2]);
+                double price = Double.parseDouble(parts[3]);
+                
+                double totalCost = quantity * price;
+                
+                // Get current game state from DB
+                Map<String, Object> gameState = server.dbHandler.getGameData(gameId);
+                double playerCash = ((Number) gameState.get("player_cash")).doubleValue();
+                
+                // Validate player has enough cash
+                if (playerCash < totalCost) {
+                    sendPacket("ERROR|Insufficient cash: need £" + String.format("%.2f", totalCost) + " but have £" + String.format("%.2f", playerCash));
+                    sendPortfolioUpdate();
                     return;
                 }
                 
-                startFiveDayGame();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        });
-        lobbyThread.setDaemon(true);
-        lobbyThread.start();
-    }
-
-    // init game from db
-    private boolean initializeGame() {
-        // temp user for boot
-        String testUser = "player1";
-        gameState = dbManager.getGameState(testUser);
-        
-        if (gameState == null) {
-            int difficulty = 2;  // Default difficulty
-            gameState = dbManager.createOrResetGame(testUser, difficulty);
-            if (gameState == null) {
-                log("WARNING: DB unavailable, using dev mode defaults");
-                gameState = new DBManager.GameState(1, testUser, 1, difficulty, 10000.0, 0, 0, 0, 0, 0, 0.0);
-            } else {
-                log("Created new game for user=" + testUser + " difficulty=" + difficulty);
-            }
-        } else {
-            log("Loaded stored game for user=" + testUser + " day=" + gameState.currentDay);
-        }
-
-        currentDay = gameState.currentDay;
-        currentTicker = dbManager.getTickerForDay(currentDay);
-        if (currentTicker == null) currentTicker = "AAPL";
-        refreshUnlockedTickers();
-        return true;
-    }
-
-    private void refreshUnlockedTickers() {
-        availableTickers.clear();
-        for (int day = 1; day <= currentDay; day++) {
-            String ticker = dbManager.getTickerForDay(day);
-            if (ticker != null && !availableTickers.contains(ticker)) {
-                availableTickers.add(ticker);
+                // Execute trade: deduct cash, add stock
+                double newCash = playerCash - totalCost;
+                int stockId = server.dbHandler.getStockId(ticker);
+                
+                // Update player cash
+                server.dbHandler.updatePlayerCash(gameId, newCash);
+                
+                // Update holdings
+                int currentHolding = server.dbHandler.getPlayerHolding(gameId, stockId);
+                server.dbHandler.updatePlayerHolding(gameId, stockId, currentHolding + quantity);
+                
+                System.out.println("Game " + gameId + ": BUY " + quantity + " x " + ticker + " @ £" + price + " = £" + totalCost + " | Cash: £" + playerCash + " -> £" + newCash);
+                
+                sendPortfolioUpdate();
+            } catch (Exception e) {
+                sendPacket("ERROR|" + e.getMessage());
+                e.printStackTrace();
             }
         }
-        if (availableTickers.isEmpty()) {
-            availableTickers.add("AAPL");
-        }
-    }
 
-    // main game loop boot
-    private void startFiveDayGame() {
-        if (gameSessionRunning) return;
-        if (gameScheduler != null && !gameScheduler.isShutdown() && !gameScheduler.isTerminated()) return;
-        marketLoopStarted = true;
-        gameSessionRunning = true;
-
-        log("=" + "=".repeat(50));
-        log("STARTING 5-DAY GAME - Difficulty: " + gameState.difficulty);
-        log("=" + "=".repeat(50));
-
-        gameScheduler = Executors.newSingleThreadScheduledExecutor();
-        gameScheduler.scheduleAtFixedRate(this::tickGame, 0, 1, TimeUnit.SECONDS);
-    }
-
-    // main tick
-    private synchronized void tickGame() {
-        if (!running || !gameSessionRunning || gameState == null) return;
-
-        // start day if needed
-        if (!activeCycle.startsWith("CYCLE")) {
-            log("[TICK] Starting new day, current activeCycle=" + (activeCycle.isEmpty() ? "EMPTY" : activeCycle));
-            startNewDay();
-        }
-
-        // tick active cycle
-        if ("CYCLE1".equals(activeCycle)) {
-            if (cycleOne == null) {
-                log("ERROR: [TICK] cycleOne is null!");
+        private void handleSell(String[] parts) {
+            if (gameId == -1) {
+                sendPacket("ERROR|No active game");
                 return;
             }
-            tickCycleOne();
-            if (cycleOne.isComplete()) {
-                endCycle1();
-                startCycle2();
-            }
-        } else if ("CYCLE2".equals(activeCycle)) {
-            broadcastToAll(cycleTwo.placeholderPacket());
-            if (cycleTwo.isComplete()) {
-                endCycle2();
-                // Check if game is done
-                if (currentDay < 5) {
-                    // move day forward
-                    advanceToNextDay();
-                } else if (currentDayLoopCount < 4) {
-                    // day5 extra loop
-                    currentDayLoopCount++;
-                    startCycle1();
-                } else {
-                    // game done
-                    endGame();
-                }
-            }
-        }
-    }
-
-    private boolean hasAnyInGameSessions() {
-        synchronized (sessions) {
-            for (ClientSession s : sessions) {
-                if (s.startedGame) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    private synchronized void handleDisconnectNoActionDay(ClientSession session) {
-        if (!session.startedGame) {
-            return;
-        }
-        if (!marketLoopStarted || gameState == null) {
-            return;
-        }
-        if (hasAnyInGameSessions()) {
-            return;
-        }
-
-        log("No active players left. Forfeit day " + currentDay + " as no-action.");
-        dbManager.appendActivity(gameState.userId, currentDay, "NO_ACTION_DISCONNECT", 0.0);
-
-        if ("CYCLE1".equals(activeCycle) && cycleOne != null) {
-            cycleOne.stop();
-        }
-        if ("CYCLE2".equals(activeCycle) && cycleTwo != null) {
-            cycleTwo.stop();
-        }
-
-        if (currentDay < 5) {
-            advanceToNextDay();
-        } else {
-            endGame();
-        }
-    }
-
-    // start a new day
-    private void startNewDay() {
-        log("\n" + "=".repeat(60));
-        log("DAY " + currentDay + ": Starting with ticker " + currentTicker);
-        log("Unlocked tickers: " + availableTickers);
-        log("=".repeat(60));
-
-        // make sure data exists for all tickers
-        List<String> csvPaths = new ArrayList<>();
-        for (String ticker : availableTickers) {
-            if (!ensureTickerDataAvailable(ticker, gameState.difficulty)) {
-                log("ERROR: Could not generate price data for " + ticker);
+            if (parts.length < 4) {
+                sendPacket("ERROR|Invalid SELL packet format");
                 return;
             }
-            csvPaths.add(ticker + "_stock_prices.csv");
-        }
-        cycleOne = new CycleOneEngine(csvPaths);
 
-        cycle1HighPrice = 0;
-        cycle1LowPrice = Double.MAX_VALUE;
-        cycle1OpenPrice = 0;
-        cycle1ClosePrice = 0;
-
-        startCycle1();
-    }
-
-    // get/generate csv for this ticker
-    private boolean ensureTickerDataAvailable(String ticker, int difficulty) {
-        String csvPath = ticker + "_stock_prices.csv";
-        Path path = Path.of(csvPath);
-
-        // csv already there
-        if (Files.exists(path)) {
-            log("Using existing CSV: " + csvPath);
-            return true;
-        }
-
-        // no csv, gen it now
-        log("CSV not found, generating via stock_sim.exe...");
-        
-        // try prev close as S0
-        double S0 = 500.0;
-        if (currentDay > 1) {
-            Double prevClose = getPreviousDayCloseFromCsv();
-            if (prevClose != null && prevClose > 0) {
-                S0 = prevClose;
-                log("Using previous close as S0: " + String.format("%.2f", S0));
-            }
-        }
-
-        // run stock_sim
-        boolean generated = runStockSimulator(ticker, difficulty, S0);
-        if (!generated) {
-            log("ERROR: Could not generate CSV for " + ticker);
-            return false;
-        }
-        return true;
-    }
-
-    // run sim exe. fallback = cmake build
-    private boolean runStockSimulator(String ticker, int difficulty, double S0) {
-        try {
-            // try exe first
-            ProcessBuilder pb = new ProcessBuilder(BUILD_EXECUTABLE, ticker, String.valueOf(difficulty), String.format("%.2f", S0));
-            pb.directory(new java.io.File("."));
-            pb.redirectErrorStream(true);
-
-            Process p = pb.start();
-            BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
-            String line;
-            while ((line = br.readLine()) != null) {
-                log("  [stock_sim] " + line);
-            }
-
-            int exitCode = p.waitFor();
-            if (exitCode == 0) {
-                log("Generated " + ticker + "_stock_prices.csv");
-                return true;
-            }
-
-            log("ERROR: stock_sim.exe exited with code " + exitCode);
-            log("Attempting rebuild via cmake...");
-
-            // build fallback
-            pb = new ProcessBuilder("cmd", "/c", BUILD_FALLBACK);
-            pb.directory(new java.io.File("."));
-            pb.redirectErrorStream(true);
-
-            p = pb.start();
-            br = new BufferedReader(new InputStreamReader(p.getInputStream()));
-            while ((line = br.readLine()) != null) {
-                if (line.contains("error") || line.contains("Error")) {
-                    log("  [cmake] " + line);
+            try {
+                String ticker = parts[1];
+                int quantity = Integer.parseInt(parts[2]);
+                double price = Double.parseDouble(parts[3]);
+                
+                double totalProceeds = quantity * price;
+                
+                // Get current game state from DB
+                Map<String, Object> gameState = server.dbHandler.getGameData(gameId);
+                double playerCash = ((Number) gameState.get("player_cash")).doubleValue();
+                
+                // Get current holdings
+                int stockId = server.dbHandler.getStockId(ticker);
+                int currentHolding = server.dbHandler.getPlayerHolding(gameId, stockId);
+                
+                // Validate player has enough stock
+                if (currentHolding < quantity) {
+                    sendPacket("ERROR|Insufficient holdings: have " + currentHolding + " but trying to sell " + quantity);
+                    sendPortfolioUpdate();
+                    return;
                 }
+                
+                // Execute trade: add cash, remove stock
+                double newCash = playerCash + totalProceeds;
+                
+                // Update player cash
+                server.dbHandler.updatePlayerCash(gameId, newCash);
+                
+                // Update holdings
+                server.dbHandler.updatePlayerHolding(gameId, stockId, currentHolding - quantity);
+                
+                System.out.println("Game " + gameId + ": SELL " + quantity + " x " + ticker + " @ £" + price + " = £" + totalProceeds + " | Cash: £" + playerCash + " -> £" + newCash);
+                
+                sendPortfolioUpdate();
+            } catch (Exception e) {
+                sendPacket("ERROR|" + e.getMessage());
+                e.printStackTrace();
+            }
+        }
+
+        private void handleSellAll(String[] parts) {
+            if (gameId == -1) {
+                sendPacket("ERROR|No active game");
+                return;
+            }
+            if (parts.length < 3) {
+                sendPacket("ERROR|Invalid SELL_ALL packet format");
+                return;
             }
 
-            exitCode = p.waitFor();
-            log("Cmake build exited with code " + exitCode);
-
-            if (exitCode == 0) {
-                // retry sim
-                pb = new ProcessBuilder(BUILD_EXECUTABLE, ticker, String.valueOf(difficulty), String.format("%.2f", S0));
-                pb.directory(new java.io.File("."));
-                pb.redirectErrorStream(true);
-
-                p = pb.start();
-                br = new BufferedReader(new InputStreamReader(p.getInputStream()));
-                while ((line = br.readLine()) != null) {
-                    log("  [stock_sim] " + line);
+            try {
+                String ticker = parts[1];
+                double price = Double.parseDouble(parts[2]);
+                
+                // Get current holdings
+                int stockId = server.dbHandler.getStockId(ticker);
+                int currentHolding = server.dbHandler.getPlayerHolding(gameId, stockId);
+                
+                if (currentHolding <= 0) {
+                    sendPacket("ERROR|No holdings to sell");
+                    return;
                 }
+                
+                // Calculate cash to add
+                double cashFromSale = currentHolding * price;
+                
+                // Get current cash and update
+                Map<String, Object> gameState = server.dbHandler.getGameData(gameId);
+                double playerCash = ((Number) gameState.get("player_cash")).doubleValue();
+                double newCash = playerCash + cashFromSale;
+                
+                // Update DB
+                server.dbHandler.updatePlayerCash(gameId, newCash);
+                server.dbHandler.updatePlayerHolding(gameId, stockId, 0);
+                
+                System.out.println("Game " + gameId + ": SELL_ALL " + currentHolding + " x " + ticker + " @ £" + 
+                    String.format("%.3f", price) + " = £" + String.format("%.2f", cashFromSale) + 
+                    " | Cash: £" + String.format("%.2f", playerCash) + " -> £" + String.format("%.2f", newCash));
+                
+                sendPortfolioUpdate();
+            } catch (Exception e) {
+                sendPacket("ERROR|" + e.getMessage());
+            }
+        }
 
-                exitCode = p.waitFor();
-                if (exitCode == 0) {
-                    log("Generated " + ticker + "_stock_prices.csv after rebuild");
-                    return true;
+        private void sendPortfolioUpdate() {
+            try {
+                // Get current game data from DB
+                Map<String, Object> gameState = server.dbHandler.getGameData(gameId);
+                double playerCash = ((Number) gameState.get("player_cash")).doubleValue();
+                
+                // Format: PORTFOLIO_UPDATE|cash|ticker1:qty1:price1|...
+                StringBuilder packet = new StringBuilder("PORTFOLIO_UPDATE|" + String.format("%.2f", playerCash));
+                String[] stocks = {"AAPL", "TSLA", "GOOGL", "NVDA", "AMZN"};
+                
+                // Add all unlocked stocks for current day with current holdings and latest price
+                for (int i = 0; i < currentDay && i < stocks.length; i++) {
+                    String ticker = stocks[i];
+                    int stockId = server.dbHandler.getStockId(ticker);
+                    int holding = server.dbHandler.getPlayerHolding(gameId, stockId);
+                    // Use the last streamed price for this ticker, or 0 if not yet streamed
+                    double price = lastPricePerTicker.getOrDefault(ticker, 0.0);
+                    packet.append("|").append(ticker).append(":").append(holding).append(":").append(String.format("%.2f", price));
                 }
-            }
-
-            return false;
-        } catch (Exception e) {
-            log("ERROR running stock_sim: " + e.getMessage());
-            return false;
-        }
-    }
-
-    private void startCycle1() {
-        activeCycle = "CYCLE1";
-        if (cycleOne != null) {
-            cycleOne.start();
-        }
-        broadcastToAll("{\"TYPE\":\"PHASE\",\"CYCLE\":\"CYCLE1\"}");
-        log("CYCLE1 started for ticker=" + currentTicker);
-    }
-
-    private void endCycle1() {
-        cycleOne.stop();
-        // todo: store ohlc if needed
-        log("CYCLE1 complete for " + currentTicker);
-    }
-
-    private void startCycle2() {
-        activeCycle = "CYCLE2";
-        cycleTwo.start();
-        broadcastToAll("{\"TYPE\":\"PHASE\",\"CYCLE\":\"CYCLE2\"}");
-        log("CYCLE2 started");
-    }
-
-    private void endCycle2() {
-        cycleTwo.stop();
-        log("CYCLE2 complete");
-    }
-
-    private void advanceToNextDay() {
-        currentDayLoopCount = 0;
-        currentDay++;
-        if (currentDay > 5) {
-            currentDay = 5;  // safety guard
-            return;
-        }
-
-        currentTicker = dbManager.getTickerForDay(currentDay);
-        refreshUnlockedTickers();
-        dbManager.advanceToNextDay(gameState.userId);
-        gameState.currentDay = currentDay;
-
-        log("\n*** ADVANCING TO DAY " + currentDay + " ***");
-        activeCycle = "";  // force day start next tick
-    }
-
-    private Double getPreviousDayCloseFromCsv() {
-        try {
-            String prevTicker = dbManager.getTickerForDay(currentDay - 1);
-            if (prevTicker == null) return null;
-            Path p = Path.of(prevTicker + "_stock_prices.csv");
-            if (!Files.exists(p)) return null;
-
-            String last = null;
-            for (String line : Files.readAllLines(p)) {
-                if (line != null && !line.isBlank()) {
-                    last = line;
-                }
-            }
-            if (last == null || last.startsWith("Time,")) return null;
-            String[] parts = last.split(",");
-            if (parts.length < 3) return null;
-            return Double.parseDouble(parts[2].trim());
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private void endGame() {
-        log("\n" + "=".repeat(60));
-        log("GAME COMPLETE!");
-        log("=".repeat(60));
-
-        if (gameState != null) {
-            dbManager.setGameStatus(gameState.userId, "COMPLETED", currentDay);
-            gameState.gameStatus = "COMPLETED";
-            gameState.completedDay = currentDay;
-        }
-
-        gameSessionRunning = false;
-        marketLoopStarted = false;
-        activeCycle = "";
-
-        if (gameScheduler != null) {
-            gameScheduler.shutdownNow();
-            gameScheduler = null;
-        }
-
-        broadcastToAll("{\"TYPE\":\"GAME_COMPLETE\",\"DAY\":" + currentDay + ",\"GAME_STATUS\":\"COMPLETED\"}");
-    }
-
-    private void tickCycleOne() {
-        List<ClientSession> snapshot;
-        synchronized (sessions) {
-            snapshot = new ArrayList<>(sessions);
-        }
-
-        for (ClientSession session : snapshot) {
-            int step = getGranularityStep(session.clientId);
-            int index = cycleOne.advanceAndGetIndexForClient(session.clientId, step);
-            if (index < 0) {
-                continue;
-            }
-
-            for (String ticker : availableTickers) {
-                String packet = cycleOne.pricePacketAtIndex(ticker, index);
-                if (packet != null) {
-                    sendToSession(session, packet);
-                }
-
-                String aiPacket = cycleOne.aiPacketAtIndex(ticker, index);
-                if (aiPacket != null) {
-                    sendToSession(session, aiPacket);
-                }
+                
+                sendPacket(packet.toString());
+            } catch (Exception e) {
+                System.err.println("Error sending portfolio update: " + e.getMessage());
+                e.printStackTrace();
             }
         }
-    }
 
-    private int getGranularityStep(int clientId) {
-        ClientState state = clientStates.get(clientId);
-        if (state != null && state.hasPowerup("coffee")) {
-            return POWERUP_STEP;
-        }
-        return DEFAULT_STEP;
-    }
-
-    private void handleClientMessages(ClientSession session) {
-        try {
-            String line;
-            while ((line = session.reader.readLine()) != null) {
-                if (line.startsWith("LOGIN:")) {
-                    handleLogin(session, line);
-                } else if (line.startsWith("SIGNUP:")) {
-                    handleSignup(session, line);
-                } else if (line.startsWith("START_GAME:")) {
-                    handleStartGame(session, line);
-                } else if (line.startsWith("RESUME_GAME:")) {
-                    handleResumeGame(session, line);
-                } else if (line.startsWith("POWERUP:")) {
-                    handlePowerup(session, line);
-                }
+        /**
+         * Send packet to client
+         */
+        private void sendPacket(String packet) {
+            if (out != null) {
+                out.println(packet);
             }
-        } catch (IOException e) {
-            log("Client disconnected: id=" + session.clientId + " reason=" + e.getMessage());
-        } finally {
-            removeSession(session);
-        }
-    }
-
-    private void handleStartGame(ClientSession session, String message) {
-        // START_GAME:<difficulty>:<jwt>
-        String[] parts = message.split(":", 3);
-        if (parts.length < 3) {
-            sendToSession(session, "{\"TYPE\":\"ERROR\",\"MSG\":\"INVALID_START_GAME_FORMAT\"}");
-            return;
         }
 
-        if (session.username == null || session.username.isBlank()) {
-            sendToSession(session, "{\"TYPE\":\"START_GAME_DENY\",\"REASON\":\"LOGIN_REQUIRED\"}");
-            return;
-        }
-
-        String jwt = parts[2].trim();
-        if (!authService.isJwtShapeValid(jwt) || !authService.validateJwtForUser(session.username, jwt)) {
-            sendToSession(session, "{\"TYPE\":\"START_GAME_DENY\",\"REASON\":\"JWT_MISMATCH\"}");
-            return;
-        }
-
-        try {
-            int difficulty = Integer.parseInt(parts[1].trim());
-            if (difficulty < 1 || difficulty > 4) difficulty = 2;
-
-            String testUser = session.username;
-            DBManager.GameState gs = dbManager.createOrResetGame(testUser, difficulty);
-
-            if (gs == null) {
-                gs = new DBManager.GameState(1, testUser, 1, difficulty, 10000.0, 0, 0, 0, 0, 0, 0.0);
+        /**
+         * Build C++ backend executable if not already built
+         */
+        private synchronized void buildCppBackend() throws Exception {
+            File exeFile = new File("Backend/build/bin/Release/stock_sim.exe");
+            if (exeFile.exists()) {
+                System.out.println("C++ backend executable already exists");
+                return;
             }
-
-            gameState = gs;
-            currentDay = gameState.currentDay;
-            currentTicker = dbManager.getTickerForDay(currentDay);
-            if (currentTicker == null) currentTicker = "AAPL";
-            refreshUnlockedTickers();
-            session.startedGame = true;
-
-            startFiveDayGame();
             
-            sendToSession(session, "{\"TYPE\":\"GAME_START\",\"DAY\":" + currentDay + ",\"TICKER\":\"" + currentTicker + "\"}");
-            log("START_GAME client=" + session.clientId + " difficulty=" + difficulty + " user=" + testUser);
-        } catch (NumberFormatException e) {
-            sendToSession(session, "{\"TYPE\":\"ERROR\",\"MSG\":\"INVALID_DIFFICULTY\"}");
-        }
-    }
-
-    private void handleResumeGame(ClientSession session, String message) {
-        // RESUME_GAME:<jwt>
-        String[] parts = message.split(":", 2);
-        if (parts.length < 2) {
-            sendToSession(session, "{\"TYPE\":\"ERROR\",\"MSG\":\"INVALID_RESUME_GAME_FORMAT\"}");
-            return;
-        }
-
-        if (session.username == null || session.username.isBlank()) {
-            sendToSession(session, "{\"TYPE\":\"START_GAME_DENY\",\"REASON\":\"LOGIN_REQUIRED\"}");
-            return;
-        }
-
-        String jwt = parts[1].trim();
-        if (!authService.isJwtShapeValid(jwt) || !authService.validateJwtForUser(session.username, jwt)) {
-            sendToSession(session, "{\"TYPE\":\"START_GAME_DENY\",\"REASON\":\"JWT_MISMATCH\"}");
-            return;
-        }
-
-        DBManager.GameState gs = dbManager.getGameState(session.username);
-        if (gs == null) {
-            sendToSession(session, "{\"TYPE\":\"START_GAME_DENY\",\"REASON\":\"NO_SAVED_GAME\"}");
-            return;
-        }
-
-        if (!"IN_PROGRESS".equalsIgnoreCase(gs.gameStatus)) {
-            sendToSession(session, "{\"TYPE\":\"START_GAME_DENY\",\"REASON\":\"NO_ACTIVE_GAME\"}");
-            return;
-        }
-
-        gameState = gs;
-        currentDay = gameState.currentDay;
-        currentTicker = dbManager.getTickerForDay(currentDay);
-        if (currentTicker == null) currentTicker = "AAPL";
-        refreshUnlockedTickers();
-        session.startedGame = true;
-
-        dbManager.setGameStatus(gameState.userId, "IN_PROGRESS", gameState.completedDay);
-        gameState.gameStatus = "IN_PROGRESS";
-
-        startFiveDayGame();
-
-        sendToSession(session, "{\"TYPE\":\"GAME_START\",\"DAY\":" + currentDay + ",\"TICKER\":\"" + currentTicker + "\"}");
-        log("RESUME_GAME client=" + session.clientId + " user=" + session.username + " day=" + currentDay);
-    }
-
-    private void handleSignup(ClientSession session, String message) {
-        // SIGNUP:<username>:<password>:<jwt>
-        String[] parts = message.split(":", 4);
-        if (parts.length < 4) {
-            sendToSession(session, "{\"TYPE\":\"ERROR\",\"MSG\":\"INVALID_SIGNUP_FORMAT\"}");
-            return;
-        }
-
-        String username = parts[1].trim();
-        String password = parts[2].trim();
-        String jwt = parts[3].trim();
-
-        if (username.isEmpty() || password.isEmpty()) {
-            sendToSession(session, "{\"TYPE\":\"SIGNUP_FAIL\",\"REASON\":\"EMPTY_FIELDS\"}");
-            return;
-        }
-
-        boolean created = authService.registerUser(username, password, jwt);
-        if (created) {
-            sendToSession(session, "{\"TYPE\":\"SIGNUP_OK\",\"USER\":\"" + username + "\"}");
-            log("SIGNUP_OK client=" + session.clientId + " user=" + username);
-        } else {
-            sendToSession(session, "{\"TYPE\":\"SIGNUP_FAIL\",\"REASON\":\"USER_EXISTS_OR_INVALID\"}");
-            log("SIGNUP_FAIL client=" + session.clientId + " user=" + username);
-        }
-    }
-
-    private void handleLogin(ClientSession session, String message) {
-        // LOGIN:<username>:<jwt> OR LOGIN:<username>:<password>:<jwt>
-        String[] parts = message.split(":", 4);
-        if (parts.length < 3) {
-            sendToSession(session, "{\"TYPE\":\"ERROR\",\"MSG\":\"INVALID_LOGIN_FORMAT\"}");
-            return;
-        }
-
-        String username = parts[1].trim();
-        String password = "password"; // compat fallback for old client packets
-        String jwt;
-
-        if (parts.length >= 4) {
-            password = parts[2].trim();
-            jwt = parts[3].trim();
-        } else {
-            jwt = parts[2].trim();
-        }
-
-        boolean ok = authService.authenticateUser(username, password, jwt);
-
-        if (ok) {
-            session.username = username;
-            session.jwt = jwt;
-            DBManager.GameState gs = dbManager.getGameState(username);
-            boolean hasSavedGame = gs != null;
-            boolean hasActiveGame = gs != null && "IN_PROGRESS".equalsIgnoreCase(gs.gameStatus);
-            String gameStatus = hasSavedGame ? (gs.gameStatus == null || gs.gameStatus.isBlank() ? "COMPLETED" : gs.gameStatus.toUpperCase()) : "NONE";
-            int day = hasSavedGame ? gs.currentDay : 1;
-            int difficulty = hasSavedGame ? gs.difficulty : 2;
-            sendToSession(session, "{\"TYPE\":\"LOGIN_OK\",\"USER\":\"" + username + "\",\"HAS_SAVED_GAME\":" + hasSavedGame + ",\"HAS_ACTIVE_GAME\":" + hasActiveGame + ",\"GAME_STATUS\":\"" + gameStatus + "\",\"DAY\":" + day + ",\"DIFFICULTY\":" + difficulty + "}");
-            log("LOGIN_OK client=" + session.clientId + " user=" + username);
-        } else {
-            sendToSession(session, "{\"TYPE\":\"LOGIN_FAIL\"}");
-            log("LOGIN_FAIL client=" + session.clientId);
-        }
-    }
-
-    private void handlePowerup(ClientSession session, String message) {
-        // POWERUP:<name>:<jwt>
-        String[] parts = message.split(":", 3);
-        if (parts.length < 3) {
-            sendToSession(session, "{\"TYPE\":\"ERROR\",\"MSG\":\"INVALID_POWERUP_FORMAT\"}");
-            return;
-        }
-
-        String powerup = parts[1].trim().toLowerCase();
-        String jwt = parts[2].trim();
-
-        if (!authService.isJwtShapeValid(jwt)) {
-            sendToSession(session, "{\"TYPE\":\"POWERUP_DENY\",\"REASON\":\"INVALID_JWT\"}");
-            return;
-        }
-
-        if (session.username == null || !authService.userExists(session.username)) {
-            sendToSession(session, "{\"TYPE\":\"POWERUP_DENY\",\"REASON\":\"LOGIN_REQUIRED\"}");
-            return;
-        }
-
-        if (!authService.validateJwtForUser(session.username, jwt)) {
-            sendToSession(session, "{\"TYPE\":\"POWERUP_DENY\",\"REASON\":\"JWT_MISMATCH\"}");
-            return;
-        }
-
-        if ("coffee".equals(powerup)) {
-            ClientState state = clientStates.get(session.clientId);
-            if (state != null) {
-                state.addPowerup("coffee", ClientState.COFFEE_DURATION_MS);
-                sendToSession(session, "{\"TYPE\":\"POWERUP_OK\",\"NAME\":\"coffee\",\"STEP\":1}");
-                log("POWERUP coffee client=" + session.clientId + " -> step=1");
+            System.out.println("Building C++ backend...");
+            File rootDir = new File(".");
+            
+            // Run: cmake -B Backend/build -S . (CMakeLists.txt is in project root)
+            ProcessBuilder cmake = new ProcessBuilder("cmake", "-B", "Backend/build", "-S", ".");
+            cmake.directory(rootDir);
+            cmake.redirectErrorStream(true);
+            Process cmakeProcess = cmake.start();
+            
+            // Read output from CMake
+            java.io.BufferedReader cmakeReader = new java.io.BufferedReader(
+                new java.io.InputStreamReader(cmakeProcess.getInputStream()));
+            String line;
+            System.out.println("=== CMake Configuration Output ===");
+            while ((line = cmakeReader.readLine()) != null) {
+                System.out.println("[CMAKE] " + line);
             }
-            return;
-        }
-
-        sendToSession(session, "{\"TYPE\":\"POWERUP_DENY\",\"REASON\":\"UNKNOWN_POWERUP\"}");
-    }
-
-    private void broadcastToAll(String payload) {
-        List<ClientSession> snapshot;
-        synchronized (sessions) {
-            snapshot = new ArrayList<>(sessions);
-        }
-        for (ClientSession session : snapshot) {
-            sendToSession(session, payload);
-        }
-    }
-
-    //Instead of sockets need to make TCP implemention here, this is where we will send packets to clients
-    private void sendToSession(ClientSession session, String payload) {
-        try {
-            session.writer.write(payload);
-            session.writer.write("\n");
-            session.writer.flush();
-        } catch (IOException e) {
-            log("Send failed for client=" + session.clientId + ": " + e.getMessage());
-        }
-    }
-
-    private void removeSession(ClientSession session) {
-        synchronized (sessions) {
-            sessions.remove(session);
-        }
-        clientStates.remove(session.clientId);
-        try {
-            session.socket.close();
-        } catch (IOException ignored) {
-        }
-        log("CLIENT DISCONNECTED: id=" + session.clientId);
-        handleDisconnectNoActionDay(session);
-    }
-
-    public void stop() {
-        running = false;
-        gameSessionRunning = false;
-        marketLoopStarted = false;
-        if (gameScheduler != null) {
-            gameScheduler.shutdownNow();
-            gameScheduler = null;
-        }
-        try {
-            if (serverSocket != null && !serverSocket.isClosed()) {
-                serverSocket.close();
-                log("Server stopped");
+            
+            int cmakeExit = cmakeProcess.waitFor();
+            
+            if (cmakeExit != 0) {
+                System.err.println("CMake configuration failed with exit code " + cmakeExit);
+                throw new Exception("CMake configuration failed");
             }
-        } catch (IOException e) {
-            log("Error closing server: " + e.getMessage());
+            
+            // Run: cmake --build Backend/build --config Release
+            ProcessBuilder build = new ProcessBuilder("cmake", "--build", "Backend/build", "--config", "Release");
+            build.directory(rootDir);
+            build.redirectErrorStream(true);
+            Process buildProcess = build.start();
+            
+            // Read output from build
+            java.io.BufferedReader buildReader = new java.io.BufferedReader(
+                new java.io.InputStreamReader(buildProcess.getInputStream()));
+            System.out.println("=== CMake Build Output ===");
+            while ((line = buildReader.readLine()) != null) {
+                System.out.println("[BUILD] " + line);
+            }
+            
+            int buildExit = buildProcess.waitFor();
+            
+            if (buildExit != 0) {
+                System.err.println("CMake build failed with exit code " + buildExit);
+                throw new Exception("CMake build failed");
+            }
+            
+            System.out.println("C++ backend built successfully");
         }
-    }
 
-    //Session class to hold client info and streams, again were updatin to TCP so streams do for now, will need to add packet queue and TCP send/recv logic here in the future
-    private static class ClientSession {
-        private final int clientId;
-        private final Socket socket;
-        private final String clientIp;
-        private final BufferedReader reader;
-        private final BufferedWriter writer;
-        private String username;
-        private String jwt;
-        private boolean startedGame;
+        /**
+         * Call C++ backend to generate stock prices
+         */
+        private void callCppBackend(String ticker, int difficulty, double startingPrice, String seed) {
+            new Thread(() -> {
+                try {
+                    // Ensure backend is built
+                    buildCppBackend();
+                    
+                    String[] cmd = {"Backend/build/bin/Release/stock_sim.exe", ticker, String.valueOf(difficulty), 
+                                   String.valueOf(startingPrice), seed};
+                    
+                    ProcessBuilder pb = new ProcessBuilder(cmd);
+                    pb.redirectErrorStream(true);
+                    Process process = pb.start();
+                    
+                    int exitCode = process.waitFor();
+                    if (exitCode == 0) {
+                        System.out.println("C++ backend completed for " + ticker);
+                    } else {
+                        System.err.println("C++ backend failed with exit code " + exitCode);
+                    }
+                } catch (Exception e) {
+                    System.err.println("Error calling C++ backend: " + e.getMessage());
+                    e.printStackTrace();
+                }
+            }).start();
+        }
 
-        private ClientSession(int clientId, Socket socket) throws IOException {
-            this.clientId = clientId;
-            this.socket = socket;
-            this.clientIp = socket.getInetAddress().getHostAddress();
-            this.reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            this.writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
-            this.startedGame = false;
+        /**
+         * Stream game prices across multiple days (5 days total)
+         * Day progression: Day 1 (AAPL) -> Day 2 (AAPL+TSLA) -> ... -> Day 5 (all stocks)
+         * Each day streams ALL available tickers in CYCLE_1, then CYCLE_2 for regeneration
+         */
+        private void streamGamePrices(int gameId, String firstTicker) {
+            String[] allTickers = {"AAPL", "TSLA", "GOOGL", "NVDA", "AMZN"};
+            
+            try {
+                while (currentDay <= 5) {
+                    System.out.println("Game " + gameId + ": Starting Day " + currentDay);
+                    
+                    // Generate prices for all available tickers on this day
+                    for (int i = 0; i < currentDay && i < allTickers.length; i++) {
+                        String ticker = allTickers[i];
+                        String csvFile = ticker + "_day" + currentDay + "_stock_prices.csv";
+                        File priceFile = new File(csvFile);
+                        
+                        // Generate this ticker's prices if not already generated
+                        if (!priceFile.exists()) {
+                            String seed = UUID.randomUUID().toString();
+                            int tickerStockId = server.dbHandler.getStockId(ticker);
+                            server.dbHandler.saveDaySeed(gameId, currentDay, tickerStockId, seed);
+                            
+                            // Generate in background and wait
+                            Thread genThread = new Thread(() -> {
+                                try {
+                                    buildCppBackend();
+                                    String[] cmd = {"Backend/build/bin/Release/stock_sim.exe", ticker,
+                                                   String.valueOf(difficulty), "500.0", seed};
+                                    ProcessBuilder pb = new ProcessBuilder(cmd);
+                                    pb.redirectErrorStream(true);
+                                    Process process = pb.start();
+                                    process.waitFor();
+                                    
+                                    // Rename the generated CSV to include day number
+                                    File oldFile = new File(ticker + "_stock_prices.csv");
+                                    File newFile = new File(ticker + "_day" + currentDay + "_stock_prices.csv");
+                                    if (oldFile.exists()) {
+                                        oldFile.renameTo(newFile);
+                                    }
+                                } catch (Exception e) {
+                                    System.err.println("Error generating " + ticker + ": " + e.getMessage());
+                                }
+                            });
+                            genThread.start();
+                            genThread.join();
+                        }
+                    }
+                    
+                    // Stream all available tickers for this day IN PARALLEL
+                    List<Thread> streamingThreads = new ArrayList<>();
+                    for (int i = 0; i < currentDay && i < allTickers.length; i++) {
+                        String ticker = allTickers[i];
+                        
+                        // Create a thread for each ticker to stream prices in parallel
+                        Thread streamThread = new Thread(() -> {
+                            try {
+                                // Wait for C++ to finish generating CSV if needed
+                                Thread.sleep(1000);
+                                
+                                String csvFile = ticker + "_day" + currentDay + "_stock_prices.csv";
+                                BufferedReader csvReader = new BufferedReader(new FileReader(csvFile));
+                                String line;
+                                int pointCount = 0;
+                                int sendCount = 0;
+                                csvReader.readLine(); // Skip header
+                                
+                                // Stream 102 price points for this ticker
+                                while ((line = csvReader.readLine()) != null && sendCount < 102) {
+                                    pointCount++;
+                                    
+                                    // Send every 5th point
+                                    if (pointCount % 5 == 0) {
+                                        String[] parts = line.split(",");
+                                        if (parts.length >= 3) {
+                                            double price = Double.parseDouble(parts[2]);
+                                            lastPricePerTicker.put(ticker, price);  // Track latest price
+                                            sendPacket("PRICE_UPDATE|" + ticker + "|" + price + "|" + pointCount);
+                                            sendPortfolioUpdate();
+                                            sendCount++;
+                                        }
+                                        Thread.sleep(1000); // 1 second between each 5th point
+                                    }
+                                }
+                                csvReader.close();
+                                System.out.println("Game " + gameId + ": Day " + currentDay + " - Finished streaming " + ticker);
+                            } catch (Exception e) {
+                                System.err.println("Error streaming " + ticker + ": " + e.getMessage());
+                            }
+                        });
+                        streamThread.start();
+                        streamingThreads.add(streamThread);
+                    }
+                    
+                    // Wait for all streaming threads to complete
+                    for (Thread thread : streamingThreads) {
+                        thread.join();
+                    }
+                    System.out.println("Game " + gameId + ": Day " + currentDay + " - All tickers finished streaming");
+                    
+                    // Switch to CYCLE_2 (10 second hidden phase for regeneration)
+                    sendPacket("PHASE|CYCLE_2");
+                    sendPortfolioUpdate();
+                    System.out.println("Game " + gameId + ": Day " + currentDay + " ending, entering CYCLE_2");
+                    
+                    // Regenerate prices for newly unlocked ticker during CYCLE_2 (hidden from user)
+                    if (currentDay < 5) {
+                        String nextTicker = allTickers[currentDay]; // Next ticker to unlock
+                        String newSeed = UUID.randomUUID().toString();
+                        int tickerStockId = server.dbHandler.getStockId(nextTicker);
+                        server.dbHandler.saveDaySeed(gameId, currentDay + 1, tickerStockId, newSeed);
+                        
+                        // Generate prices in background thread
+                        Thread regenerateThread = new Thread(() -> {
+                            try {
+                                buildCppBackend();
+                                String[] cmd = {"Backend/build/bin/Release/stock_sim.exe", nextTicker,
+                                               String.valueOf(difficulty), "500.0", newSeed};
+                                ProcessBuilder pb = new ProcessBuilder(cmd);
+                                pb.redirectErrorStream(true);
+                                Process process = pb.start();
+                                int exitCode = process.waitFor();
+                                if (exitCode == 0) {
+                                    // Rename to include next day number
+                                    File oldFile = new File(nextTicker + "_stock_prices.csv");
+                                    File newFile = new File(nextTicker + "_day" + (currentDay + 1) + "_stock_prices.csv");
+                                    if (oldFile.exists()) {
+                                        oldFile.renameTo(newFile);
+                                    }
+                                    System.out.println("Regenerated prices for Day " + (currentDay + 1) + " (" + nextTicker + ")");
+                                } else {
+                                    System.err.println("Failed to regenerate " + nextTicker);
+                                }
+                            } catch (Exception e) {
+                                System.err.println("Error regenerating prices: " + e.getMessage());
+                            }
+                        });
+                        regenerateThread.start();
+                        regenerateThread.join(); // Wait for regeneration to complete
+                    }
+                    
+                    Thread.sleep(10000); // CYCLE_2 lasts 10 seconds
+                    
+                    // Check if game is complete (after day 5)
+                    if (currentDay >= 5) {
+                        System.out.println("Game " + gameId + ": All 5 days completed");
+                        handleGameCompletion(gameId);
+                        break;
+                    }
+                    
+                    // Move to next day and update database
+                    currentDay++;
+                    server.dbHandler.updateGameDay(gameId, currentDay);
+                    System.out.println("Game " + gameId + ": Advanced to Day " + currentDay + ", DB updated");
+                    
+                    sendPortfolioUpdate();
+                    
+                    // Switch back to CYCLE_1 for next day
+                    sendPacket("PHASE|CYCLE_1");
+                    sendPortfolioUpdate();
+                    System.out.println("Game " + gameId + ": Starting Day " + currentDay);
+                }
+            } catch (Exception e) {
+                System.err.println("Error streaming prices: " + e.getMessage());
+                sendPacket("ERROR|Price streaming error");
+            }
+        }
+        
+        /**
+         * Handle game completion - determine winner and clean up
+         */
+        private void handleGameCompletion(int gameId) {
+            try {
+                // Get final game state (cash for player and AI)
+                Map<String, Object> gameState = server.dbHandler.getGameFinalState(gameId);
+                
+                double playerCash = gameState != null ? ((Number) gameState.get("player_cash")).doubleValue() : 10000.0;
+                double aiCash = gameState != null ? ((Number) gameState.get("ai_cash")).doubleValue() : 10000.0;
+                
+                // Calculate net worth (cash + holdings value)
+                // For now, simplified - in production would sum all positions
+                double playerNetWorth = playerCash;
+                double aiNetWorth = aiCash;
+                
+                String result;
+                if (playerNetWorth > aiNetWorth) {
+                    result = "WIN";
+                    System.out.println("Game " + gameId + ": Player WINS (" + playerNetWorth + " vs " + aiNetWorth + ")");
+                } else if (aiNetWorth > playerNetWorth) {
+                    result = "LOSS";
+                    System.out.println("Game " + gameId + ": Player LOSES (" + playerNetWorth + " vs " + aiNetWorth + ")");
+                } else {
+                    result = "DRAW";
+                    System.out.println("Game " + gameId + ": DRAW");
+                }
+                
+                sendPacket("GAME_OVER|" + result + "|" + playerNetWorth + "|" + aiNetWorth);
+                
+                // Delete game from active games
+                server.dbHandler.deleteActiveGame(gameId);
+                System.out.println("Game " + gameId + ": Deleted from active games");
+            } catch (Exception e) {
+                System.err.println("Error handling game completion: " + e.getMessage());
+                sendPacket("ERROR|Game completion error");
+            }
+        }
+
+        /**
+         * Disconnect client and clean up active game if mid-progress
+         */
+        private void disconnect() {
+            try {
+                // If client disconnected mid-game, mark the day as completed and advance to next day
+                if (gameId != -1 && currentDay >= 1 && currentDay < 5) {
+                    int nextDay = currentDay + 1;
+                    server.dbHandler.updateGameDay(gameId, nextDay);
+                    System.out.println("Client disconnected mid-game (Game " + gameId + ", Day " + currentDay + "). Advanced to Day " + nextDay);
+                } else if (gameId != -1 && currentDay >= 5) {
+                    // Game was at or past day 5, mark as complete
+                    server.dbHandler.updateGameDay(gameId, 5);
+                }
+                
+                if (userId != -1) {
+                    server.unregisterClient(userId);
+                }
+                if (socket != null) {
+                    socket.close();
+                }
+            } catch (IOException e) {
+                System.err.println("Error closing socket: " + e.getMessage());
+            }
+            System.out.println("Client disconnected");
         }
     }
 }

@@ -1,15 +1,3 @@
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
-import java.net.Socket;
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
-import java.util.Queue;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.fxml.FXMLLoader;
@@ -17,418 +5,512 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
 
-//Main Client app
+import java.io.*;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
+
 public class client extends Application {
     private static client instance;
-
     private Stage primaryStage;
-    private Thread clientThread;
-    private volatile boolean clientRunning = false;
-
-    private String username = "guest";
-    private String password = "password";
-    private String jwtToken = "header.payload.signature";
-    private boolean hasSavedGame = false;
+    private Socket socket;
+    private PrintWriter out;
+    private BufferedReader in;
+    private Parent currentScreen;
+    private Object currentController;
+    private volatile boolean connected = false;
     private boolean hasActiveGame = false;
-    private String savedGameStatus = "NONE";
-    private int savedGameDay = 1;
-    private int savedGameDifficulty = 2;
-    //^Default values for saved game state until login response is processed
+    private int activeGameDifficulty = 1;
+    private int activeGameDay = 1;
+    private boolean loginPending = false;
 
-    private GameUIController gameUIController;
-    private MainMenuController mainMenuController;
-    private Cycle2Controller cycle2Controller;
-
-    public static client getInstance() {
-        return instance;
-    }
-    
-    //Start of JavaFX application lifecycle
     @Override
-    public void start(Stage stage) throws Exception {
+    public void start(Stage stage) {
         instance = this;
         primaryStage = stage;
-        primaryStage.setFullScreenExitHint("");
-        primaryStage.setFullScreen(true);
+        primaryStage.setTitle("Project Belford");
+
+        // Connect to server
+        connectToServer();
+
+        // Show login screen
         showLoginScreen();
-
-        stage.setOnCloseRequest(event -> {
-            shutdownClient();
-        });
     }
 
-    //Shows the loginFXML
-    private void showLoginScreen() {
-        try {
-            FXMLLoader loader = new FXMLLoader(getClass().getResource("Assets/loginmenu.fxml"));
-            Parent root = loader.load();
-            primaryStage.setTitle("COMP208 - Login");
-            primaryStage.setScene(new Scene(root));
-            primaryStage.show();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    //MainScreen
-    public void showMainMenuScreen() {
-        try {
-            FXMLLoader loader = new FXMLLoader(getClass().getResource("Assets/MainMenu.fxml"));
-            Parent root = loader.load();
-            mainMenuController = loader.getController();
-            if (mainMenuController != null) {
-                mainMenuController.setUser(username);
-                mainMenuController.applySavedGameState(hasSavedGame, hasActiveGame, savedGameStatus, savedGameDay, savedGameDifficulty);
-                //take state from server ^ and apply to main menu for display and interaction purposes
-            }
-            primaryStage.setTitle("Project Belford");
-            primaryStage.setScene(new Scene(root));
-            primaryStage.show();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    public void showCycle1Screen() {
-        try {
-            FXMLLoader loader = new FXMLLoader(getClass().getResource("Assets/COMP208GameUI.fxml"));
-            Parent root = loader.load();
-            gameUIController = loader.getController();
-            if (gameUIController != null) {
-                gameUIController.setConnectionStatus("Connecting to server...");
-            }
-            primaryStage.setTitle("COMP208 - Cycle 1");
-            primaryStage.setScene(new Scene(root));
-            primaryStage.show();
-            startClientThread();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    //PLACEHOLDER CYCLE 2 SCREEN, REPLACE WITH ACTUAL CYCLE 2 UI
-    public void showCycle2Screen() {
+    /**
+     * Safe method to open a screen - closes current screen and shows new one
+     * Prevents memory leaks and ensures fullscreen display
+     */
+    private synchronized void openScreen(String fxmlFileName, String screenName) {
         Platform.runLater(() -> {
             try {
-                FXMLLoader loader = new FXMLLoader(getClass().getResource("Assets/Cycle2Placeholder.fxml"));
-                Parent root = loader.load();
-                cycle2Controller = loader.getController();
-                primaryStage.setTitle("COMP208 - Cycle 2");
-                primaryStage.setScene(new Scene(root));
+                // Close previous screen to free resources
+                if (currentScreen != null) {
+                    currentScreen = null;
+                }
+                currentController = null;
+
+                // Load new FXML file
+                FXMLLoader loader = new FXMLLoader(getClass().getResource("Assets/" + fxmlFileName));
+                Parent newScreen = loader.load();
+                currentController = loader.getController();
+
+                // Create scene and attach to stage
+                Scene scene = new Scene(newScreen);
+                primaryStage.setScene(scene);
+
+                // Make fullscreen and bring to top
+                primaryStage.setFullScreen(true);
+                primaryStage.setAlwaysOnTop(false);
+                primaryStage.setFullScreenExitHint("");
                 primaryStage.show();
-            } catch (IOException e) {
+                primaryStage.toFront();
+                primaryStage.requestFocus();
+
+                currentScreen = newScreen;
+                System.out.println("Screen loaded: " + screenName);
+            } catch (Exception e) {
+                System.err.println("Failed to load screen: " + screenName);
                 e.printStackTrace();
             }
         });
     }
 
-    public void onLoginSuccess(String user, String pass) {
-        username = user;
-        password = pass;
-        showMainMenuScreen();
-    }
+    /**
+     * Connect to server at localhost:5000 and start packet listener
+     */
+    private void connectToServer() {
+        new Thread(() -> {
+            try {
+                socket = new Socket("localhost", 5000);
+                out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
+                in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+                connected = true;
+                System.out.println("Connected to server at localhost:5000");
 
-    public void applySavedGameState(boolean savedGame, boolean activeGame, String status, int day, int difficulty) {
-        hasSavedGame = savedGame;
-        hasActiveGame = activeGame;
-        savedGameStatus = (status == null || status.isBlank()) ? (savedGame ? "COMPLETED" : "NONE") : status.trim().toUpperCase();
-        savedGameDay = Math.max(1, day);
-        savedGameDifficulty = difficulty < 1 ? 2 : difficulty;
-
-        if (mainMenuController != null) {
-            mainMenuController.applySavedGameState(hasSavedGame, hasActiveGame, savedGameStatus, savedGameDay, savedGameDifficulty);
-        }
-    }
-
-    //JWT for authentication, not secure so will chnage later
-    private String buildJwtToken(String user) {
-        // fake jwt shape for dev auth path
-        String header = Base64.getUrlEncoder().withoutPadding()
-            .encodeToString("header".getBytes(StandardCharsets.UTF_8));
-        String payload = Base64.getUrlEncoder().withoutPadding()
-            .encodeToString((user + ":" + System.currentTimeMillis()).getBytes(StandardCharsets.UTF_8));
-        String signature = Base64.getUrlEncoder().withoutPadding()
-            .encodeToString("signature".getBytes(StandardCharsets.UTF_8));
-        return header + "." + payload + "." + signature;
-    }
-
-
-    public String requestLogin(String user, String pass) {
-        // short one-shot login socket before game socket
-        String jwt = buildJwtToken(user);
-        try (Socket socket = new Socket("127.0.0.1", 5000);
-             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-             PrintWriter out = new PrintWriter(socket.getOutputStream(), true)) {
-            out.println("LOGIN:" + user + ":" + pass + ":" + jwt);
-            String line = in.readLine();
-            if (line != null && line.contains("\"TYPE\":\"LOGIN_OK\"")) {
-                hasSavedGame = extractBoolean(line, "HAS_SAVED_GAME");
-                hasActiveGame = extractBoolean(line, "HAS_ACTIVE_GAME");
-                savedGameStatus = extractString(line, "GAME_STATUS");
-                savedGameDay = extractInt(line, "DAY");
-                savedGameDifficulty = extractInt(line, "DIFFICULTY");
-                if (savedGameStatus.isBlank()) {
-                    savedGameStatus = hasSavedGame ? "COMPLETED" : "NONE";
-                } else {
-                    savedGameStatus = savedGameStatus.toUpperCase();
-                }
-                if (savedGameDay < 1) {
-                    savedGameDay = 1;
-                }
-                if (savedGameDifficulty < 1) {
-                    savedGameDifficulty = 2;
-                }
-                username = user;
-                password = pass;
-                jwtToken = jwt;
-                return "LOGIN_OK";
+                // Start listening for packets
+                listenForPackets();
+            } catch (IOException e) {
+                System.err.println("Failed to connect to server: " + e.getMessage());
+                Platform.runLater(() -> showErrorDialog("Cannot connect to server at localhost:5000"));
             }
-            return "LOGIN_FAIL";
-        } catch (IOException e) {
-            return "LOGIN_FAIL";
-        }
+        }).start();
     }
 
-    public String requestSignup(String user, String pass) {
-        // one-shot signup request
-        String jwt = buildJwtToken(user);
-        try (Socket socket = new Socket("127.0.0.1", 5000);
-             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-             PrintWriter out = new PrintWriter(socket.getOutputStream(), true)) {
-            out.println("SIGNUP:" + user + ":" + pass + ":" + jwt);
-            String line = in.readLine();
-            if (line != null && line.contains("\"TYPE\":\"SIGNUP_OK\"")) {
-                return "SIGNUP_OK";
+    /**
+     * Listen for packets from server and handle them
+     */
+    private void listenForPackets() {
+        try {
+            String packet;
+            while ((packet = in.readLine()) != null) {
+                handlePacket(packet);
             }
-            return "SIGNUP_FAIL";
         } catch (IOException e) {
-            return "SIGNUP_FAIL";
+            System.err.println("Connection lost: " + e.getMessage());
+            Platform.runLater(() -> showErrorDialog("Lost connection to server"));
+        } finally {
+            connected = false;
+            try {
+                socket.close();
+            } catch (IOException ignored) {
+            }
         }
     }
 
-    //Begin client thread and send start game command to server, server will respond with GAME_START packet if successful, or START_GAME_DENY if not (with reason)
-    public void startGame(int difficulty) {
-        // ensure connector exists before sending command
-        startClientThread();
-        ClientConnector.sendCommand("START_GAME:" + difficulty + ":" + jwtToken);
+    /**
+     * Parse and handle packets from server
+     * Packet format: TYPE|data1|data2|...
+     */
+    private void handlePacket(String packet) {
+        if (packet == null || packet.isEmpty()) return;
+
+        String[] parts = packet.split("\\|");
+        String packetType = parts[0];
+
+        try {
+            switch (packetType) {
+                case "LOGIN_SUCCESS":
+                    handleLoginSuccess(parts);
+                    break;
+                case "LOGIN_FAILED":
+                    handleLoginFailed(parts);
+                    break;
+                case "SIGNUP_SUCCESS":
+                    handleSignupSuccess(parts);
+                    break;
+                case "SIGNUP_FAILED":
+                    handleSignupFailed(parts);
+                    break;
+                case "ACTIVE_GAMES":
+                    handleActiveGames(parts);
+                    break;
+                case "GAME_INFO":
+                    handleGameInfo(parts);
+                    break;
+                case "GAME_START":
+                    handleGameStart(parts);
+                    break;
+                case "GAME_RESUMED":
+                    handleGameResumed(parts);
+                    break;
+                case "PHASE":
+                    handlePhaseChange(parts);
+                    break;
+                case "PRICE_UPDATE":
+                    handlePriceUpdate(parts);
+                    break;
+                case "PORTFOLIO_UPDATE":
+                    handlePortfolioUpdate(parts);
+                    break;
+                case "GAME_DATA":
+                    handleGameData(parts);
+                    break;
+                case "GAME_END":
+                    handleGameEnd(parts);
+                    break;
+                case "GAME_OVER":
+                    handleGameOver(parts);
+                    break;
+                case "ERROR":
+                    handleError(parts);
+                    break;
+                default:
+                    System.out.println("Unknown packet type: " + packetType);
+            }
+        } catch (Exception e) {
+            System.err.println("Error handling packet: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
-    //Jut resuems active game if found
-    public void resumeGame() {
-        startClientThread();
-        ClientConnector.sendCommand("RESUME_GAME:" + jwtToken);
+    private void handleLoginSuccess(String[] parts) {
+        System.out.println("Login successful for user: " + (parts.length > 1 ? parts[1] : ""));
+        // Don't show main menu yet - wait for ACTIVE_GAMES/GAME_INFO packets
+        loginPending = true;
+        // If no active games are found within a timeout, show the menu anyway
+        new Thread(() -> {
+            try {
+                Thread.sleep(1000); // Wait up to 1 second for game info
+                if (loginPending) {
+                    loginPending = false;
+                    showMainMenuAfterLogin();
+                }
+            } catch (InterruptedException e) {
+                // Ignore
+            }
+        }).start();
     }
 
-    private void startClientThread() {
-        if (clientThread != null && clientThread.isAlive()) {
+    private void handleLoginFailed(String[] parts) {
+        String reason = parts.length > 1 ? parts[1] : "Invalid credentials";
+        System.out.println("Login failed: " + reason);
+        Platform.runLater(() -> showLoginError(reason));
+    }
+
+    private void handleSignupSuccess(String[] parts) {
+        System.out.println("Signup successful");
+        Platform.runLater(this::showMainMenuScreen);
+    }
+
+    private void handleSignupFailed(String[] parts) {
+        String reason = parts.length > 1 ? parts[1] : "Signup failed";
+        System.out.println("Signup failed: " + reason);
+        Platform.runLater(() -> showLoginError(reason));
+    }
+
+    private void handleActiveGames(String[] parts) {
+        // Format: ACTIVE_GAMES|count
+        int count = parts.length > 1 ? Integer.parseInt(parts[1]) : 0;
+        System.out.println("Active games found: " + count);
+        if (count == 0) {
+            // No active games - show menu immediately
+            if (loginPending) {
+                loginPending = false;
+                showMainMenuAfterLogin();
+            }
+        }
+        // If count > 0, wait for GAME_INFO packets
+    }
+
+    private void handleGameInfo(String[] parts) {
+        // Format: GAME_INFO|game_id|difficulty|current_day|player_cash|ai_cash
+        if (parts.length >= 4) {
+            try {
+                hasActiveGame = true;
+                activeGameDifficulty = Integer.parseInt(parts[2]);
+                activeGameDay = Integer.parseInt(parts[3]);
+                System.out.println("Game info: Day " + activeGameDay + ", Difficulty " + activeGameDifficulty);
+                
+                // After receiving game info, show the main menu
+                if (loginPending) {
+                    loginPending = false;
+                    showMainMenuAfterLogin();
+                }
+            } catch (NumberFormatException e) {
+                System.err.println("Error parsing game info: " + e.getMessage());
+            }
+        }
+    }
+
+    private void handleGameStart(String[] parts) {
+        System.out.println("Game started - showing Cycle 1");
+        // Clear active game flags since a new game is starting
+        hasActiveGame = false;
+        activeGameDay = 1;
+        activeGameDifficulty = 1;
+        Platform.runLater(() -> openScreen("COMP208GameUI.fxml", "Game UI - Cycle 1"));
+    }
+
+    private void handleGameResumed(String[] parts) {
+        if (parts.length < 4) return;
+        try {
+            int gameId = Integer.parseInt(parts[1]);
+            int difficulty = Integer.parseInt(parts[2]);
+            int currentDay = Integer.parseInt(parts[3]);
+            System.out.println("Game resumed - Game ID: " + gameId + ", Day: " + currentDay + ", Difficulty: " + difficulty);
+            
+            // Clear active game flags since we're now in the game
+            hasActiveGame = false;
+            activeGameDay = currentDay;
+            activeGameDifficulty = difficulty;
+            
+            Platform.runLater(() -> openScreen("COMP208GameUI.fxml", "Game UI - Cycle 1"));
+        } catch (NumberFormatException e) {
+            System.err.println("Error parsing game resumed packet: " + e.getMessage());
+        }
+    }
+
+    private void handlePhaseChange(String[] parts) {
+        if (parts.length < 2) return;
+        String phase = parts[1];
+        System.out.println("Phase change: " + phase);
+
+        switch (phase) {
+            case "CYCLE_1":
+                Platform.runLater(() -> openScreen("COMP208GameUI.fxml", "Game UI - Cycle 1"));
+                break;
+            case "CYCLE_2":
+                Platform.runLater(() -> openScreen("Cycle2Placeholder.fxml", "Game UI - Cycle 2"));
+                break;
+            default:
+                System.out.println("Unknown phase: " + phase);
+        }
+    }
+
+    private void handlePriceUpdate(String[] parts) {
+        if (parts.length < 4) return;
+        String ticker = parts[1];
+        double price = Double.parseDouble(parts[2]);
+        int point = Integer.parseInt(parts[3]);
+        System.out.println("Price update: " + ticker + " @ $" + price + " (point " + point + ")");
+        
+        // Update the current GameUIController if it's active
+        if (currentController instanceof GameUIController) {
+            GameUIController controller = (GameUIController) currentController;
+            Platform.runLater(() -> controller.updatePriceData(ticker, price, point));
+        }
+    }
+
+    private void handlePortfolioUpdate(String[] parts) {
+        // Format: PORTFOLIO_UPDATE|cash|ticker1:qty1:price1|ticker2:qty2:price2|...
+        if (parts.length < 2) return;
+        String cash = parts[1];
+        
+        java.util.List<GameUIController.PortfolioEntry> holdings = new java.util.ArrayList<>();
+        for (int i = 2; i < parts.length; i++) {
+            String[] entry = parts[i].split(":");
+            if (entry.length == 3) {
+                try {
+                    String ticker = entry[0];
+                    int quantity = Integer.parseInt(entry[1]);
+                    double price = Double.parseDouble(entry[2]);
+                    holdings.add(new GameUIController.PortfolioEntry(ticker, quantity, price));
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
+        
+        // Update the GameUIController if it's active
+        if (currentController instanceof GameUIController) {
+            GameUIController controller = (GameUIController) currentController;
+            Platform.runLater(() -> controller.updatePortfolio(cash, holdings));
+        }
+    }
+
+    private void handleGameData(String[] parts) {
+        // Handle game data updates (prices, portfolio, etc.)
+        System.out.println("Received game data update");
+    }
+
+    private void handleGameEnd(String[] parts) {
+        System.out.println("Game ended");
+        Platform.runLater(this::showMainMenuScreen);
+    }
+
+    private void handleGameOver(String[] parts) {
+        // Format: GAME_OVER|result|playerNetWorth|aiNetWorth
+        String result = parts.length > 1 ? parts[1] : "UNKNOWN";
+        String playerNetWorth = parts.length > 2 ? parts[2] : "0";
+        String aiNetWorth = parts.length > 3 ? parts[3] : "0";
+        
+        System.out.println("Game Over - Result: " + result + " | Player: £" + playerNetWorth + " | AI: £" + aiNetWorth);
+        Platform.runLater(() -> showGameOverDialog(result, playerNetWorth, aiNetWorth));
+    }
+
+    private void handleError(String[] parts) {
+        String errorMsg = parts.length > 1 ? parts[1] : "Unknown error";
+        System.err.println("Server error: " + errorMsg);
+        Platform.runLater(() -> showErrorDialog(errorMsg));
+    }
+
+    // ==================== Public API Methods ====================
+
+    public static client getInstance() {
+        return instance;
+    }
+
+    public void requestLogin(String username, String password) {
+        if (!connected) {
+            showErrorDialog("Not connected to server");
             return;
         }
-        clientRunning = true;
-        clientThread = new Thread(new ClientConnector());
-        clientThread.setDaemon(true);
-        clientThread.start();
-    }
-    
-    private void stopClientThread() {
-        clientRunning = false;
-        if (clientThread != null && clientThread.isAlive()) {
-            clientThread.interrupt();
-        }
+        sendPacket("LOGIN|" + username + "|" + password);
     }
 
-    //Here we can send powerup requests with our token for valedation
-    public void requestPowerup(String name) {
-        ClientConnector.sendCommand("POWERUP:" + name + ":" + jwtToken);
+    public void requestSignup(String username, String password) {
+        if (!connected) {
+            showErrorDialog("Not connected to server");
+            return;
+        }
+        sendPacket("SIGNUP|" + username + "|" + password);
+    }
+
+    public void startGame(int difficulty) {
+        if (!connected) {
+            showErrorDialog("Not connected to server");
+            return;
+        }
+        sendPacket("START_GAME|" + difficulty);
+    }
+
+    public void resumeGame() {
+        if (!connected) {
+            showErrorDialog("Not connected to server");
+            return;
+        }
+        sendPacket("RESUME_GAME");
+    }
+
+    public void showMainMenuScreen() {
+        openScreen("MainMenu.fxml", "Main Menu");
+    }
+    
+    private void showMainMenuAfterLogin() {
+        openScreen("MainMenu.fxml", "Main Menu");
+        
+        // Update main menu with active game info
+        Platform.runLater(() -> {
+            if (currentController instanceof MainMenuController) {
+                MainMenuController controller = (MainMenuController) currentController;
+                controller.applySavedGameState(false, hasActiveGame, null, activeGameDay, activeGameDifficulty);
+                System.out.println("Main menu updated - hasActiveGame=" + hasActiveGame);
+            }
+        });
+    }
+
+    public void showLoginScreen() {
+        openScreen("loginmenu.fxml", "Login");
+    }
+
+    public void requestPowerup(String powerupName) {
+        if (!connected) {
+            showErrorDialog("Not connected to server");
+            return;
+        }
+        sendPacket("POWERUP|" + powerupName);
     }
 
     public void shutdownClient() {
-        stopClientThread();
+        System.out.println("Shutting down client...");
         Platform.exit();
     }
 
-
-    //Extractors to read JSON withouth a library, just using regex for simplicity since we control the format and only need a few fields, not ideal but works for now
-    /**
-     * TODO: replace with proper JSON parsing if time allows, this is very rudimentary and only for demo purposes, not production code
-     * @param message
-     * @param key
-     * @return
-     */
-    private static double extractDouble(String message, String key) {
-        Pattern pattern = Pattern.compile("\"" + Pattern.quote(key) + "\"\\s*:\\s*(-?\\d+(?:\\.\\d+)?)");
-        Matcher matcher = pattern.matcher(message);
-        if (!matcher.find()) {
-            return Double.NaN;
+    public void requestBuy(String ticker, int quantity, double price) {
+        if (!connected) {
+            showErrorDialog("Not connected to server");
+            return;
         }
-        try {
-            return Double.parseDouble(matcher.group(1));
-        } catch (NumberFormatException e) {
-            return Double.NaN;
+        sendPacket("BUY|" + ticker + "|" + quantity + "|" + price);
+    }
+
+    public void requestSell(String ticker, int quantity, double price) {
+        if (!connected) {
+            showErrorDialog("Not connected to server");
+            return;
+        }
+        sendPacket("SELL|" + ticker + "|" + quantity + "|" + price);
+    }
+
+    public void requestSellAll(String ticker, double price) {
+        if (!connected) {
+            showErrorDialog("Not connected to server");
+            return;
+        }
+        sendPacket("SELL_ALL|" + ticker + "|" + price);
+    }
+    // ==================== Helper Methods ====================
+
+    private void sendPacket(String packet) {
+        /**ring -> bytes[] 
+         * St
+         * Turn to bytes[]
+         * - Add a checksum
+         * - then send it
+         */
+        if (out != null) {
+            out.println(packet);
         }
     }
 
-    private static int extractInt(String message, String key) {
-        double value = extractDouble(message, key);
-        if (Double.isNaN(value)) {
-            return -1;
-        }
-        return (int) value;
-    }
-
-    private static boolean extractBoolean(String message, String key) {
-        Pattern pattern = Pattern.compile("\"" + Pattern.quote(key) + "\"\\s*:\\s*(true|false)", Pattern.CASE_INSENSITIVE);
-        Matcher matcher = pattern.matcher(message);
-        if (!matcher.find()) {
-            return false;
-        }
-        return Boolean.parseBoolean(matcher.group(1));
-    }
-
-    private static String extractString(String message, String key) {
-        Pattern pattern = Pattern.compile("\"" + Pattern.quote(key) + "\"\\s*:\\s*\"([^\"]*)\"");
-        Matcher matcher = pattern.matcher(message);
-        if (!matcher.find()) {
-            return "";
-        }
-        return matcher.group(1);
-    }
-
-    //Connector class handles server commms
-    private static class ClientConnector implements Runnable {
-        private static volatile PrintWriter sharedOut;
-
-        //Queue for sequential commands like BUY SELL and powerups 
-        private static final Queue<String> pendingCommands = new ConcurrentLinkedQueue<>();
-
-        public static void sendCommand(String cmd) {
-            PrintWriter out = sharedOut;
-            if (out != null) {
-                out.println(cmd);
-                out.flush();
+    private void showLoginError(String message) {
+        Platform.runLater(() -> {
+            // Update login screen status label using the stored controller reference
+            if (currentController instanceof LoginController) {
+                LoginController controller = (LoginController) currentController;
+                controller.setStatus("Error: " + message);
+                System.out.println("Login error displayed: " + message);
             } else {
-                pendingCommands.offer(cmd);
+                System.err.println("Could not update login error, controller not found");
             }
-        }
-
-        private static void flushPendingCommands() {
-            PrintWriter out = sharedOut;
-            if (out == null) return;
-
-            String cmd;
-            while ((cmd = pendingCommands.poll()) != null) {
-                out.println(cmd);
-                out.flush();
-            }
-        }
-
-
-        @Override
-        public void run() {
-            // persistent game socket loop
-            while (!Thread.currentThread().isInterrupted() && client.getInstance().clientRunning) {
-                try (Socket socket = new Socket("127.0.0.1", 5000);
-                     BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                     PrintWriter out = new PrintWriter(socket.getOutputStream(), true)) {
-                    sharedOut = out;
-                    out.println("LOGIN:" + client.getInstance().username + ":" + client.getInstance().password + ":" + client.getInstance().jwtToken);
-                    flushPendingCommands();
-
-                    //JavaFX UI updates must be run on the Application thread, so we use Platform.runLater to update the UI from this background thread when we receive packets from the server
-                    Platform.runLater(() -> {
-                        if (client.getInstance().gameUIController != null) {
-                            client.getInstance().gameUIController.setConnectionStatus("Connected to server");
-                        }
-                        if (client.getInstance().mainMenuController != null) {
-                            client app = client.getInstance();
-                            if (app.hasSavedGame || app.hasActiveGame) {
-                                app.mainMenuController.applySavedGameState(app.hasSavedGame, app.hasActiveGame, app.savedGameStatus, app.savedGameDay, app.savedGameDifficulty);
-                            } else {
-                                app.mainMenuController.setStatus("Connected. Waiting for start...");
-                            }
-                        }
-                    });
-
-                    String line;
-                    while (!Thread.currentThread().isInterrupted() && (line = in.readLine()) != null) {
-                        final String packet = line;
-                        //AGAIn tcp decoding needed here packet will ahev checksum and be bytes, need to decode and verify before processing, for now we assume all packets are well formed and valid for simplicity
-                        Platform.runLater(() -> {
-                            // route packet by TYPE only
-                            //Here is where we utilise all server packet logic
-                            client app = client.getInstance();
-                            String packetType = extractString(packet, "TYPE");
-                            if ("GAME_COMPLETE".equals(packetType)) {
-                                app.applySavedGameState(true, false, extractString(packet, "GAME_STATUS"), extractInt(packet, "DAY"), app.savedGameDifficulty);
-                                if (app.gameUIController != null) {
-                                    app.gameUIController.setConnectionStatus("Game complete. Start a new game to play again.");
-                                }
-                                app.showMainMenuScreen();
-                                return;
-                            }
-                            if ("GAME_START".equals(packetType)) {
-                                app.showCycle1Screen();
-                                return;
-                            }
-                            if ("START_GAME_DENY".equals(packetType)) {
-                                if (app.mainMenuController != null) {
-                                    app.mainMenuController.setStatus("Start denied: " + extractString(packet, "REASON"));
-                                }
-                                return;
-                            }
-                            if ("LOGIN_FAIL".equals(packetType)) {
-                                if (app.mainMenuController != null) {
-                                    app.mainMenuController.setStatus("Connection login failed");
-                                }
-                                return;
-                            }
-                            if ("PHASE".equals(packetType) && packet.contains("\"CYCLE\":\"CYCLE2\"")) {
-                                app.showCycle2Screen();
-                                return;
-                            }
-                            if ("PHASE".equals(packetType) && packet.contains("\"CYCLE\":\"CYCLE1\"")) {
-                                app.showCycle1Screen();
-                                return;
-                            }
-                            if ("CYCLE2".equals(packetType)) {
-                                long remaining = (long) extractDouble(packet, "REMAINING_MS");
-                                if (app.cycle2Controller != null) {
-                                    app.cycle2Controller.updateCycle2("Java Tiled world placeholder running...", remaining);
-                                }
-                                return;
-                            }
-                            if ("PRICE".equals(packetType) && app.gameUIController != null) {
-                                String ticker = extractString(packet, "TICKER");
-                                double price = extractDouble(packet, "PRICE");
-                                int time = extractInt(packet, "TIME");
-                                app.gameUIController.handlePricePacket(ticker, price, time, packet);
-                                return;
-                            }
-                            if ("AI_PRICE".equals(packetType) && app.gameUIController != null) {
-                                String ticker = extractString(packet, "TICKER");
-                                double price = extractDouble(packet, "PRICE");
-                                int time = extractInt(packet, "TIME");
-                                app.gameUIController.handleAIPacket(ticker, price, time, packet);
-                            }
-                        });
-                    }
-                } catch (IOException e) {
-                    sharedOut = null;
-                    //Runlayer again to update UI on disconnect and attempt reconnect after a short delay, this will loop until the client is closed or connection is re-established
-                    Platform.runLater(() -> {
-                        if (client.getInstance().gameUIController != null) {
-                            client.getInstance().gameUIController.setConnectionStatus("Waiting for server...");
-                        }
-                    });
-                    try {
-                        Thread.sleep(1000);
-                    } catch (InterruptedException interruptedException) {
-                        Thread.currentThread().interrupt();
-                    }
-                }
-            }
-        }
+        });
     }
-    
+
+    private void showErrorDialog(String message) {
+        System.err.println("Error: " + message);
+        // Can be extended to show actual dialog
+    }
+
+    private void showGameOverDialog(String result, String playerNetWorth, String aiNetWorth) {
+        // Simple console output for now - can be extended to show actual dialog with results
+        System.out.println("====== GAME OVER ======");
+        System.out.println("Result: " + result);
+        System.out.println("Player Net Worth: £" + playerNetWorth);
+        System.out.println("AI Net Worth: £" + aiNetWorth);
+        System.out.println("=======================");
+        
+        // Return to main menu after showing game over
+        Platform.runLater(this::showMainMenuScreen);
+    }
+
+    @Override
+    public void stop() throws Exception {
+        System.out.println("Shutting down client");
+        if (socket != null) {
+            socket.close();
+        }
+        super.stop();
+    }
+
     public static void main(String[] args) {
         launch(args);
     }

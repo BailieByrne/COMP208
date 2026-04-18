@@ -2,15 +2,17 @@ import javafx.fxml.FXML;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.layout.HBox;
 
 public class MainMenuController {
     @FXML private Label welcomeLabel;
     @FXML private Label statusLabel;
     @FXML private Button resumeGameButton;
     @FXML private Button startCycle1Button;
+    @FXML private HBox difficultyBox;
     @FXML private ComboBox<Integer> difficultyCombo;
 
-    private int selectedDifficulty = 2;  // Default
+    private int selectedDifficulty = 2;  // default
     private boolean hasSavedGame = false;
     private boolean hasActiveGame = false;
     private String savedGameStatus = "NONE";
@@ -53,8 +55,17 @@ public class MainMenuController {
     }
 
     private void refreshSavedGameUi() {
+        // When there's an active game, hide Start Game button and difficulty selector
         if (startCycle1Button != null) {
             startCycle1Button.setText(hasSavedGame ? "Start New Game" : "Start Game");
+            startCycle1Button.setManaged(!hasActiveGame);
+            startCycle1Button.setVisible(!hasActiveGame);
+        }
+
+        // Hide difficulty selector and resume button based on active game status
+        if (difficultyBox != null) {
+            difficultyBox.setManaged(!hasActiveGame);
+            difficultyBox.setVisible(!hasActiveGame);
         }
 
         if (resumeGameButton != null) {
