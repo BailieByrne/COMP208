@@ -15,7 +15,7 @@ def creating_plots():
     with open(log_file, 'r') as file:   
         for line in file:
            if line.startswith("Run "): #reading the file and skipping everything that doesnt start w that
-               run_nums = line.split()[1].rstrip(':')
+               run_nums = line.split()[1].rstrip('Python=')
                time_value = line.split()[2].rstrip("s") #taking out just the time value
                run_number.append(int(run_nums))
                times.append(float(time_value))

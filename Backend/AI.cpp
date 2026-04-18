@@ -1,3 +1,4 @@
+#include <tuple>
 #include <iostream>
 #include <cassert>
 #include <fstream>
@@ -11,6 +12,8 @@
 #include <cmath>
 #include <thread>
 #include <mutex>
+#include <cstdint>
+
 
 
 class AI {
@@ -20,21 +23,28 @@ public:
  * IMPORTANt:
  * Remove the logic from the constructor to avoid heavy computation
  */
-    AI(double S0, double mu, double sigma, double sentiment, char* STOCK, int difficulty) {
+    AI(double S0, double mu, double sigma, double sentiment, std::string ticker, int difficulty, std::uint64_t seedBase) {
         /**
         AI will be passed the params to run monte carlo sim
         //Dependant on its difficulty is how many fixed points it will know.
         //The AI will then predict its own graph an optimise for the greatest deltas for price gain
         //OPTIONAL: Add a holding system if the price is relativley low towards the end of the day, it will hold and wait for a price increase.
-        assert(difficulty >= 1 && difficulty <= 4, "Difficulty must be between 1 and 4");
         **/
+
         //Local Class var declarations.
+        //Here we are going to skew by +- 5% to make the AI less accurate,
+        //This is a choice however this will break the reproducibility of the AI, so I will add a seed based random generator to generate the skew values so at least the same seed will produce the same results even with the skew.
+        std::mt19937 gen(static_cast<std::mt19937::result_type>(seedBase ^ 0x8F4A7C159D3B2E61ULL));
+        //XOR to mix the seed and remove patterns while staying deterministic, the constant is just a random large number I picked.
+        std::uniform_real_distribution<double> dist(0.95, 1.05);
         this->S0 = S0;
-        this->mu = mu;
-        this->sigma = sigma;
+        this->mu = mu * dist(gen); //Skew the drift by +-5% to make the AI less accurate and it will  make the game more fun and challenging
+
+
         this->sentiment = sentiment;
-        this->STOCK = STOCK;
+        this->ticker = ticker;
         this->difficulty = difficulty;
+        this->seedBase = seedBase;
         this->final_price = final_price;
         Known_Points.push_back(std::make_tuple(0, S0)); 
         //The first point is always known as its the starting price.
@@ -57,11 +67,11 @@ public:
                 MonteCarloRuns = 5000;
                 break;
             case 4:
-                Known_Points_Amount = 50;
+                Known_Points_Amount = 20;
                 MonteCarloRuns = 10000;
                 break;
             default:
-                Known_Points_Amount = 1;
+                Known_Points_Amount = 3;
                 MonteCarloRuns = 1000;           
         };
         
@@ -76,7 +86,8 @@ public:
         //need the final price for the brownian bridge:
         // Known_Points.push_back(std::make_tuple(509, final_price)); 
         
-        //Ive scaled the monte carlo runs, i added mean fusing to preserver the overall shape of the monte carlo mean but added some randomness by fusing it with a random path and also taking the median path to prevent outliers dominating the prediction, this should give us a more realistic predicted path.
+       
+        //Ive scaled the monte carlo runs, i added mean fusing to preserver the overall shape of the monte carlo mean but added some randomness by fusing it with a random path and also taking the median path to prevent outliers dominating the prediction, this should give us a more realistic predicted path
         MonteCarloSimulate(MonteCarloRuns); 
         //Higher difficulty is higher computation, on my system it can run 8 full graphs + AI in under 1 second which is plenty fast
         //More runs is smoother line
@@ -127,13 +138,13 @@ public:
         }
 
     void getKnownPoints() {
-        std::ifstream csv_file("stock_prices.csv");
+        std::ifstream csv_file(this->ticker + std::string("_stock_prices.csv"));
         if (!csv_file.is_open()) {
-            std::cerr << "Failed to open stock_prices.csv\n";
+            std::cerr << "Failed to open " << this->ticker << "_stock_prices.csv\n";
             return;
         }
 
-        // Read all rows
+        // read all rows
         std::vector<std::tuple<int, double>> all_points;
         std::string line;
 
@@ -166,8 +177,7 @@ public:
         std::iota(indices.begin(), indices.end(), 0);
 
         // Shuffle indices
-        std::random_device rd;
-        std::mt19937 gen(rd());
+        std::mt19937 gen(static_cast<std::mt19937::result_type>(this->seedBase ^ 0x9E3779B97F4A7C15ULL));
         std::shuffle(indices.begin(), indices.end(), gen);
 
         // Take first Known_Points_Amount entries
@@ -218,7 +228,7 @@ public:
         std::vector<double> localSum(P, 0.0);
         std::vector<double> localSumSq(P, 0.0);
 
-        std::mt19937 gen(std::random_device{}());
+        std::mt19937 gen(static_cast<std::mt19937::result_type>(this->seedBase ^ static_cast<std::uint64_t>(startIndex + 1) ^ 0xA5A5A5A5ULL));
 
         for (int r = 0; r < threadRuns; r++)
         {
@@ -305,7 +315,7 @@ public:
     }
 
     // pick a random path index to blend
-    std::mt19937 gen(std::random_device{}());
+    std::mt19937 gen(static_cast<std::mt19937::result_type>(this->seedBase ^ 0xC3A5C85C97CB3127ULL));
     std::uniform_int_distribution<int> dist(0, runs - 1);
 
     int randomIndex = dist(gen);
@@ -316,10 +326,10 @@ public:
     {
         double randomVal = valuesPerTime[t][randomIndex];
 
-        // weighted blend of median + random path
+        // weighted blend of median + random path 50/50 to preserve overall shape but add stochastic noise
         Predicted_Prices[t] =
-            0.7 * medianPath[t] +
-            0.3 * randomVal;
+            0.5 * medianPath[t] +
+            0.5 * randomVal;
     }
 }
 
@@ -347,7 +357,6 @@ public:
             //LOG CONVERSION HERE
             double log_price = std::log(price);
             assert(std::isfinite(log_price));
-            assert(log_price > 0);
             //Seperate the log conversion from the emplace to help debug
             logKnown.emplace_back(time, log_price);
         }
@@ -410,11 +419,11 @@ public:
      * Self Explanatory function
      */
     void writeToCSV(){
-        std::ofstream csv_file("predicted_prices.csv");
+        std::ofstream csv_file(this->ticker + std::string("_predicted_prices.csv"));
         csv_file << "Time,Ticker,Price\n";
 
         for (size_t i = 0; i < Predicted_Prices.size(); ++i) {
-            csv_file << i << "," << STOCK << "," << Predicted_Prices[i] << "\n";
+            csv_file << i << "," << this->ticker << "," << Predicted_Prices[i] << "\n";
         }
         csv_file.close();
         std::cout << "Done";
@@ -431,9 +440,13 @@ private:
     double mu;
     double sigma;
     double sentiment;
-    char* STOCK;
+    std::string ticker;
     int difficulty;
+    std::uint64_t seedBase = 0; //Default 0 as the base
     double final_price; //Store all paths to compute median
 };
 
-
+/**
+ * TODO:
+ * - Make the AI dumber even on diff 1 the l2 error is low, maybe add a +/-5% on the params passed from the GBM to decrease accuracy [DONE]
+ */

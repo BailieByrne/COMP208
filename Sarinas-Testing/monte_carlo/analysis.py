@@ -16,7 +16,7 @@ def analysis():
     with open(log_file, 'r') as file:   
         for line in file:
            if line.startswith("Run "): #reading the file and skipping everything that doesnt start w that
-               time_value = line.split(": ")[1].split("s")[0] #taking out just the time value
+               time_value = line.split("Python=")[1].split("s")[0] #taking out just the time value
                times.append(float(time_value))
 
     if not times:
