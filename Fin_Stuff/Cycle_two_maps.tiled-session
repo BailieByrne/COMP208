@@ -1,0 +1,48 @@
+{
+    "Map/SizeTest": {
+        "height": 4300,
+        "width": 2
+    },
+    "activeFile": "",
+    "expandedProjectPaths": [
+        "Cycle_two_testing/assets",
+        ".",
+        "Cycle_two_testing"
+    ],
+    "fileStates": {
+        "": {
+            "scaleInDock": 1
+        },
+        "Cycle_two_testing/assets/City Tiles.tsx": {
+            "scaleInDock": 1
+        },
+        "Cycle_two_testing/assets/Modern_Interiors.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "Cycle_two_testing/assets/Room_Builder_free_16x16.tsx": {
+            "scaleInDock": 1
+        }
+    },
+    "last.exportedFilePath": "C:/Year 2 Semester 2/COMP208/code/COMP208/Fin_Stuff/Cycle_two_testing/assets",
+    "last.externalTilesetPath": "C:/Year 2 Semester 2/COMP208/code/COMP208/Fin_Stuff/Cycle_two_testing/assets",
+    "last.imagePath": "C:/Year 2 Semester 2/COMP208/code/COMP208/Fin_Stuff/Cycle_two_testing/assets",
+    "map.height": 15,
+    "map.lastUsedExportFilter": "JSON map files (*.tmj *.json)",
+    "map.lastUsedFormat": "tmx",
+    "map.tileHeight": 16,
+    "map.tileWidth": 16,
+    "map.width": 20,
+    "openFiles": [
+    ],
+    "project": "Cycle_two_maps.tiled-project",
+    "recentFiles": [
+        "Cycle_two_testing/assets/Modern_Interiors.tsx"
+    ],
+    "tileset.lastUsedFilter": "Tiled tileset files (*.tsx *.xml)",
+    "tileset.lastUsedFormat": "tsx",
+    "tileset.tileSize": {
+        "height": 16,
+        "width": 16
+    }
+}

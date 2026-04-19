@@ -32,6 +32,29 @@ public class ServerController {
      * Start the server and listen for client connections
      */
     public void start() {
+        // Delete all CSV files under the current project directory
+        Deque<File> stack = new ArrayDeque<>();
+        stack.push(new File("."));
+
+        while (!stack.isEmpty()) {
+            File dir = stack.pop();
+            File[] entries = dir.listFiles();
+            if (entries == null) continue;
+
+            for (File entry : entries) {
+                if (entry.isDirectory()) {
+                    stack.push(entry);
+                } else if (entry.getName().toLowerCase().endsWith(".csv")) {
+                    if (entry.delete()) {
+                        System.out.println("Deleted: " + entry.getPath());
+                    } else {
+                        System.err.println("Failed to delete: " + entry.getPath());
+                    }
+                }
+            }
+        }
+
+
         try {
             serverSocket = new ServerSocket(PORT);
             System.out.println("Server started on port " + PORT);
@@ -308,9 +331,9 @@ public class ServerController {
                     // Delete any other active games for this user
                     server.dbHandler.deleteOtherActiveGames(userId, gameId);
 
-                    // Get AAPL stock ID (always Day 1 stock) - verify it exists
-                    int aaplStockId = server.dbHandler.getStockId("AAPL");
-                    if (aaplStockId != -1) {
+                    // Get TULA stock ID (always Day 1 stock) - verify it exists
+                    int tulaStockId = server.dbHandler.getStockId("TULA");
+                    if (tulaStockId != -1) {
                         // Send game start packet
                         sendPacket("GAME_START|" + gameId + "|" + difficulty);
                         sendPacket("PHASE|CYCLE_1");
@@ -321,7 +344,7 @@ public class ServerController {
                         
                         
                         // Start streaming prices in background thread (handles all generation and DB updates)
-                        new Thread(() -> streamGamePrices(gameId, "AAPL")).start();
+                        new Thread(() -> streamGamePrices(gameId, "TULA")).start();
                     } else {
                         sendPacket("ERROR|Stock not found");
                     }
@@ -531,7 +554,7 @@ public class ServerController {
                 
                 // Format: PORTFOLIO_UPDATE|cash|ticker1:qty1:price1|...
                 StringBuilder packet = new StringBuilder("PORTFOLIO_UPDATE|" + String.format("%.2f", playerCash));
-                String[] stocks = {"AAPL", "TSLA", "GOOGL", "NVDA", "AMZN"};
+                String[] stocks = {"TULA", "PEARS", "CORN", "RICE", "GRAIN"};
                 
                 // Add all unlocked stocks for current day with current holdings and latest price
                 for (int i = 0; i < currentDay && i < stocks.length; i++) {
@@ -562,7 +585,7 @@ public class ServerController {
                 
                 // Format: AI_PORTFOLIO_UPDATE|cash|ticker1:qty1:price1|...
                 StringBuilder packet = new StringBuilder("AI_PORTFOLIO_UPDATE|" + String.format("%.2f", aiCash));
-                String[] stocks = {"AAPL", "TSLA", "GOOGL", "NVDA", "AMZN"};
+                String[] stocks = {"TULA", "PEARS", "CORN", "RICE", "GRAIN"};
                 
                 // Get AI portfolio holdings from database
                 Map<Integer, Integer> aiPortfolio = server.dbHandler.getAIPortfolio(gameId);
@@ -685,11 +708,11 @@ public class ServerController {
 
         /**
          * Stream game prices across multiple days (5 days total)
-         * Day progression: Day 1 (AAPL) -> Day 2 (AAPL+TSLA) -> ... -> Day 5 (all stocks)
+         * Day progression: Day 1 (TULA) -> Day 2 (TULA+PEARS) -> ... -> Day 5 (all stocks)
          * Each day streams ALL available tickers in CYCLE_1, then CYCLE_2 for regeneration
          */
         private void streamGamePrices(int gameId, String firstTicker) {
-            String[] allTickers = {"AAPL", "TSLA", "GOOGL", "NVDA", "AMZN"};
+            String[] allTickers = {"TULA", "PEARS", "CORN", "RICE", "GRAIN"};
             
             try {
                 while (currentDay <= 5) {
@@ -798,7 +821,7 @@ public class ServerController {
                     }
                     System.out.println("Game " + gameId + ": Day " + currentDay + " - All tickers finished streaming");
                     
-                    // Switch to CYCLE_2 (10 second hidden phase for regeneration)
+                    // Switch to CYCLE_2 (60 second game phase for Fin_Stuff tiled game)
                     sendPacket("PHASE|CYCLE_2");
                     sendPortfolioUpdate();
                     sendAIPortfolioUpdate();
@@ -841,7 +864,7 @@ public class ServerController {
                         regenerateThread.join(); // Wait for regeneration to complete
                     }
                     
-                    Thread.sleep(10000); // CYCLE_2 lasts 10 seconds
+                    Thread.sleep(60000); // CYCLE_2 lasts 60 seconds for Fin_Stuff tiled game
                     
                     // Check if game is complete (after day 5)
                     if (currentDay >= 5) {

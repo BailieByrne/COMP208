@@ -374,7 +374,7 @@ public class client extends Application {
                 Platform.runLater(() -> openScreen("COMP208GameUI.fxml", "Game UI - Cycle 1"));
                 break;
             case "CYCLE_2":
-                Platform.runLater(() -> openScreen("Cycle2Placeholder.fxml", "Game UI - Cycle 2"));
+                Platform.runLater(() -> openScreen("Cycle2Game.fxml", "Game UI - Cycle 2"));
                 break;
             default:
                 System.out.println("Unknown phase: " + phase);
@@ -544,6 +544,10 @@ public class client extends Application {
 
     public void showLoginScreen() {
         openScreen("loginmenu.fxml", "Login");
+    }
+
+    public void showGameUI() {
+        openScreen("COMP208GameUI.fxml", "Game UI - Cycle 1");
     }
 
     public void requestPowerup(String powerupName) {

@@ -1,0 +1,66 @@
+{
+    "Map/SizeTest": {
+        "height": 4300,
+        "width": 2
+    },
+    "activeFile": "",
+    "expandedProjectPaths": [
+        ".",
+        "Cycle_two_testing",
+        "Cycle_two_testing/assets"
+    ],
+    "fileStates": {
+        "Cycle_two_testing/assets/City Tiles.tsx": {
+            "scaleInDock": 2,
+            "scaleInEditor": 1
+        },
+        "Cycle_two_testing/assets/Modern_Interiors.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "Cycle_two_testing/assets/Room_Builder_free_16x16.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "Cycle_two_testing/assets/testing_map_v1.json": {
+            "expandedObjectLayers": [
+                3
+            ],
+            "scale": 1.3656249999999999,
+            "selectedLayer": 2,
+            "viewCenter": {
+                "x": 167.32265446224255,
+                "y": 596.4302059496567
+            }
+        },
+        "Cycle_two_testing/assets/testing_map_v1.tmx": {
+            "scale": 1.3656249999999999,
+            "selectedLayer": 0,
+            "viewCenter": {
+                "x": 265.0800915331808,
+                "y": 159.26773455377577
+            }
+        }
+    },
+    "last.exportedFilePath": "C:/Year 2 Semester 2/COMP208/code/COMP208/Fin_Stuff/Cycle_two_testing/assets",
+    "last.imagePath": "C:/Users/finla/Downloads/Modern_Interiors_Free_v2.2/Modern tiles_Free/Interiors_free/16x16",
+    "map.lastUsedExportFilter": "All Files (*)",
+    "map.lastUsedFormat": "tmx",
+    "map.tileHeight": 16,
+    "map.tileWidth": 16,
+    "openFiles": [
+    ],
+    "project": "Initial_Cycle_Two_Test.tiled-project",
+    "recentFiles": [
+        "Cycle_two_testing/assets/Room_Builder_free_16x16.tsx",
+        "Cycle_two_testing/assets/Modern_Interiors.tsx",
+        "Cycle_two_testing/assets/testing_map_v1.json",
+        "Cycle_two_testing/assets/City Tiles.tsx",
+        "Cycle_two_testing/assets/testing_map_v1.tmx"
+    ],
+    "tileset.lastUsedFormat": "tsx",
+    "tileset.tileSize": {
+        "height": 16,
+        "width": 16
+    }
+}

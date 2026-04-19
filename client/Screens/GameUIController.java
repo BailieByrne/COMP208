@@ -54,6 +54,17 @@ public class GameUIController {
     private static final int MAX_POINTS = 510;  // Full trading day
     private double currentPrice = 0.0;  // Track current price for buy/sell
     private double playerCash = 10000.0;  // Track player cash for max calculation
+    
+    // Trade markers (green for buy, red for sell)
+    private final Map<String, List<XYChart.Series<Number, Number>>> buyMarkers = new HashMap<>();
+    private final Map<String, List<XYChart.Series<Number, Number>>> sellMarkers = new HashMap<>();
+    private final Map<String, List<XYChart.Series<Number, Number>>> aiBuyMarkers = new HashMap<>();
+    private final Map<String, List<XYChart.Series<Number, Number>>> aiSellMarkers = new HashMap<>();
+    
+    // Portfolio tracking for trade detection
+    private final Map<String, Integer> previousPortfolio = new HashMap<>();
+    private final Map<String, Integer> previousAIPortfolio = new HashMap<>();
+    private int currentPointIndex = 0;  // Current point in price stream
 
     //Inits the cycle1 screen and chart data
     @FXML
@@ -175,7 +186,7 @@ public class GameUIController {
     private void initializeStocksTable() {
         if (tableHoldings == null) return;
         
-        String[] stocks = {"AAPL", "TSLA", "GOOGL", "NVDA", "AMZN"};
+        String[] stocks = {"TULA", "PEARS", "CORN", "RICE", "GRAIN"};
         ObservableList<PortfolioItem> items = FXCollections.observableArrayList();
         
         for (String ticker : stocks) {
@@ -251,9 +262,48 @@ public class GameUIController {
                     renderSeries.getData().addAll(series.getData());
                     ChartUser.getData().clear();
                     ChartUser.getData().add(renderSeries);
+                    
+                    // Add trade markers
+                    if (buyMarkers.containsKey(displayTicker)) {
+                        for (XYChart.Series<Number, Number> ms : buyMarkers.get(displayTicker)) {
+                            ChartUser.getData().add(ms);
+                        }
+                    }
+                    if (sellMarkers.containsKey(displayTicker)) {
+                        for (XYChart.Series<Number, Number> ms : sellMarkers.get(displayTicker)) {
+                            ChartUser.getData().add(ms);
+                        }
+                    }
+                    
                     ChartUser.setTitle("Live Price Feed - " + displayTicker);
                 }
+                
+                // Mirror the same data to AI chart
+                if (ChartAI != null) {
+                    XYChart.Series<Number, Number> aiRenderSeries = new XYChart.Series<>();
+                    aiRenderSeries.setName(displayTicker);
+                    aiRenderSeries.getData().addAll(series.getData());
+                    ChartAI.getData().clear();
+                    ChartAI.getData().add(aiRenderSeries);
+                    
+                    // Add AI trade markers
+                    if (aiBuyMarkers.containsKey(displayTicker)) {
+                        for (XYChart.Series<Number, Number> ms : aiBuyMarkers.get(displayTicker)) {
+                            ChartAI.getData().add(ms);
+                        }
+                    }
+                    if (aiSellMarkers.containsKey(displayTicker)) {
+                        for (XYChart.Series<Number, Number> ms : aiSellMarkers.get(displayTicker)) {
+                            ChartAI.getData().add(ms);
+                        }
+                    }
+                    
+                    ChartAI.setTitle("Live Price Feed - " + displayTicker);
+                    updateAIYAxis(price);
+                }
+                
                 currentPrice = price;  // Store current price for buy/sell
+                currentPointIndex = time;  // Track current point index
                 updateYAxis(price);
             }
 
@@ -321,6 +371,19 @@ public class GameUIController {
             XYChart.Series<Number, Number> series = tickerSeries.get(ticker);
             if (series != null) {
                 ChartUser.getData().add(series);
+                
+                // Add trade markers for this ticker
+                if (buyMarkers.containsKey(ticker)) {
+                    for (XYChart.Series<Number, Number> ms : buyMarkers.get(ticker)) {
+                        ChartUser.getData().add(ms);
+                    }
+                }
+                if (sellMarkers.containsKey(ticker)) {
+                    for (XYChart.Series<Number, Number> ms : sellMarkers.get(ticker)) {
+                        ChartUser.getData().add(ms);
+                    }
+                }
+                
                 ChartUser.setTitle("Live Price Feed - " + ticker);
                 
                 // Reset highest price for this ticker
@@ -331,18 +394,32 @@ public class GameUIController {
             }
         }
 
+        // Mirror player chart to AI chart with same data
         if (ChartAI != null) {
             ChartAI.getData().clear();
-            XYChart.Series<Number, Number> aiSeries = aiTickerSeries.get(ticker);
-            if (aiSeries != null) {
-                ChartAI.getData().add(aiSeries);
-                ChartAI.setTitle("AI Prediction - " + ticker);
-                for (XYChart.Data<Number, Number> data : aiSeries.getData()) {
+            XYChart.Series<Number, Number> series = tickerSeries.get(ticker);
+            if (series != null) {
+                ChartAI.getData().add(series);
+                
+                // Add AI trade markers for this ticker
+                if (aiBuyMarkers.containsKey(ticker)) {
+                    for (XYChart.Series<Number, Number> ms : aiBuyMarkers.get(ticker)) {
+                        ChartAI.getData().add(ms);
+                    }
+                }
+                if (aiSellMarkers.containsKey(ticker)) {
+                    for (XYChart.Series<Number, Number> ms : aiSellMarkers.get(ticker)) {
+                        ChartAI.getData().add(ms);
+                    }
+                }
+                
+                ChartAI.setTitle("Live Price Feed - " + ticker);
+                for (XYChart.Data<Number, Number> data : series.getData()) {
                     highestAIPriceSeen = Math.max(highestAIPriceSeen, data.getYValue().doubleValue());
                 }
                 updateAIYAxis(highestAIPriceSeen);
             } else {
-                ChartAI.setTitle("AI Prediction");
+                ChartAI.setTitle("Live Price Feed");
                 updateAIYAxis(1.0);
             }
         }
@@ -395,6 +472,102 @@ public class GameUIController {
         while (series.getData().size() > MAX_POINTS) {
             series.getData().remove(0);
         }
+    }
+
+    /**
+     * Add a trade marker to the player chart
+     * @param ticker Stock ticker
+     * @param pointIndex Time index of the trade
+     * @param price Price at which trade occurred
+     * @param isBuy true for buy (green), false for sell (red)
+     */
+    private void addPlayerTradeMarker(String ticker, int pointIndex, double price, boolean isBuy) {
+        Map<String, List<XYChart.Series<Number, Number>>> markerMap = isBuy ? buyMarkers : sellMarkers;
+
+        XYChart.Data<Number, Number> markerPoint = new XYChart.Data<>(pointIndex, price);
+
+        // Style the node the instant JavaFX assigns it — this survives chart redraws
+        markerPoint.nodeProperty().addListener((obs, oldNode, newNode) -> {
+            if (newNode != null) {
+                String color = isBuy ? "#00CC44" : "#FF3333";
+                newNode.setStyle(
+                    "-fx-background-color: " + color + ", white;" +
+                    "-fx-background-insets: 0, 2;" +
+                    "-fx-background-radius: 8px;" +
+                    "-fx-padding: 8px;"
+                );
+                newNode.toFront();
+            }
+        });
+
+        XYChart.Series<Number, Number> markerSeries = new XYChart.Series<>();
+        markerSeries.setName(ticker + (isBuy ? "_BUY_" : "_SELL_") + pointIndex);
+        markerSeries.getData().add(markerPoint);
+
+        markerMap.computeIfAbsent(ticker, k -> new ArrayList<>()).add(markerSeries);
+
+        // Trigger chart refresh so the new marker series gets added
+        if (ChartUser != null && ticker.equals(currentTicker)) {
+            Platform.runLater(() -> refreshUserChart(ticker));
+        }
+    }
+
+    /**
+     * Add a trade marker to the AI chart
+     */
+    private void addAITradeMarker(String ticker, int pointIndex, double price, boolean isBuy) {
+        Map<String, List<XYChart.Series<Number, Number>>> markerMap = isBuy ? aiBuyMarkers : aiSellMarkers;
+
+        XYChart.Data<Number, Number> markerPoint = new XYChart.Data<>(pointIndex, price);
+
+        markerPoint.nodeProperty().addListener((obs, oldNode, newNode) -> {
+            if (newNode != null) {
+                String color = isBuy ? "#00CC44" : "#FF3333";
+                newNode.setStyle(
+                    "-fx-background-color: " + color + ", white;" +
+                    "-fx-background-insets: 0, 2;" +
+                    "-fx-background-radius: 8px;" +
+                    "-fx-padding: 8px;"
+                );
+                newNode.toFront();
+            }
+        });
+
+        XYChart.Series<Number, Number> markerSeries = new XYChart.Series<>();
+        markerSeries.setName(ticker + (isBuy ? "_AIBUY_" : "_AISELL_") + pointIndex);
+        markerSeries.getData().add(markerPoint);
+
+        markerMap.computeIfAbsent(ticker, k -> new ArrayList<>()).add(markerSeries);
+
+        if (ChartAI != null && ticker.equals(currentTicker)) {
+            Platform.runLater(() -> refreshAIChart(ticker));
+        }
+    }
+
+    /**
+     * Rebuild user chart with price series and all marker series for current ticker
+     */
+    private void refreshUserChart(String ticker) {
+        if (ChartUser == null) return;
+        ChartUser.getData().clear();
+        XYChart.Series<Number, Number> series = tickerSeries.get(ticker);
+        if (series != null) ChartUser.getData().add(series);
+        if (buyMarkers.containsKey(ticker))  ChartUser.getData().addAll(buyMarkers.get(ticker));
+        if (sellMarkers.containsKey(ticker)) ChartUser.getData().addAll(sellMarkers.get(ticker));
+        ChartUser.setTitle("Live Price Feed - " + ticker);
+    }
+
+    /**
+     * Rebuild AI chart with price series and all marker series for current ticker
+     */
+    private void refreshAIChart(String ticker) {
+        if (ChartAI == null) return;
+        ChartAI.getData().clear();
+        XYChart.Series<Number, Number> series = tickerSeries.get(ticker);
+        if (series != null) ChartAI.getData().add(series);
+        if (aiBuyMarkers.containsKey(ticker))  ChartAI.getData().addAll(aiBuyMarkers.get(ticker));
+        if (aiSellMarkers.containsKey(ticker)) ChartAI.getData().addAll(aiSellMarkers.get(ticker));
+        ChartAI.setTitle("Live Price Feed - " + ticker);
     }
 
     // show coffee powerup countdown timer in UI
@@ -471,6 +644,31 @@ public class GameUIController {
                 }
             }
 
+            // Detect trades by comparing holdings
+            if (holdings != null) {
+                for (PortfolioEntry entry : holdings) {
+                    int previousQty = previousPortfolio.getOrDefault(entry.ticker, 0);
+                    int currentQty = entry.quantity;
+                    
+                    if (currentQty != previousQty) {
+                        double price = entry.currentPrice > 0 ? entry.currentPrice : lastPricePerTicker.getOrDefault(entry.ticker, 0.0);
+                        
+                        if (currentQty > previousQty) {
+                            // BUY detected
+                            System.out.println("TRADE DETECTED: BUY " + entry.ticker + " (+" + (currentQty - previousQty) + ") at £" + price);
+                            addPlayerTradeMarker(entry.ticker, currentPointIndex, price, true);
+                        } else if (currentQty < previousQty) {
+                            // SELL detected
+                            System.out.println("TRADE DETECTED: SELL " + entry.ticker + " (-" + (previousQty - currentQty) + ") at £" + price);
+                            addPlayerTradeMarker(entry.ticker, currentPointIndex, price, false);
+                        }
+                        
+                        // Update previous portfolio
+                        previousPortfolio.put(entry.ticker, currentQty);
+                    }
+                }
+            }
+
             // Update holdings table
             if (tableHoldings != null) {
                 ObservableList<PortfolioItem> items = FXCollections.observableArrayList();
@@ -516,6 +714,31 @@ public class GameUIController {
                     lblAICash.setText("AI Cash: £" + String.format("%.2f", cashAmount));
                 } catch (NumberFormatException e) {
                     lblAICash.setText("AI Cash: £" + aiCash);
+                }
+            }
+
+            // Detect AI trades by comparing holdings
+            if (aiHoldings != null) {
+                for (PortfolioEntry entry : aiHoldings) {
+                    int previousQty = previousAIPortfolio.getOrDefault(entry.ticker, 0);
+                    int currentQty = entry.quantity;
+                    
+                    if (currentQty != previousQty) {
+                        double price = entry.currentPrice > 0 ? entry.currentPrice : lastPricePerTicker.getOrDefault(entry.ticker, 0.0);
+                        
+                        if (currentQty > previousQty) {
+                            // AI BUY detected
+                            System.out.println("AI TRADE DETECTED: BUY " + entry.ticker + " (+" + (currentQty - previousQty) + ") at £" + price);
+                            addAITradeMarker(entry.ticker, currentPointIndex, price, true);
+                        } else if (currentQty < previousQty) {
+                            // AI SELL detected
+                            System.out.println("AI TRADE DETECTED: SELL " + entry.ticker + " (-" + (previousQty - currentQty) + ") at £" + price);
+                            addAITradeMarker(entry.ticker, currentPointIndex, price, false);
+                        }
+                        
+                        // Update previous AI portfolio
+                        previousAIPortfolio.put(entry.ticker, currentQty);
+                    }
                 }
             }
 

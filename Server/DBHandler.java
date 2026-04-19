@@ -5,7 +5,8 @@ import java.util.*;
 
 /**
  * Centralized database handler for all server transactions
- * Handles user authentication, game state, and data persistence
+ * Handles user authentication, game state and data persistence
+ * //Right now this keeps all DB logic and creates a new connection on each method whcih should be chnaged
  */
 public class DBHandler {
     private static final String DB_PATH = "DB/main.db";
@@ -35,6 +36,7 @@ public class DBHandler {
 
     /**
      * Creates the database if it doesnt exist 
+     * No return values
      */
     private void initSchema() {
         try (Connection conn = getConnection()) {
@@ -127,11 +129,11 @@ public class DBHandler {
             }
 
             // Insert default stocks if they don't exist
-            stmt.execute("INSERT OR IGNORE INTO stocks (symbol, name) VALUES ('AAPL', 'Apple Inc.')");
-            stmt.execute("INSERT OR IGNORE INTO stocks (symbol, name) VALUES ('TSLA', 'Tesla Inc.')");
-            stmt.execute("INSERT OR IGNORE INTO stocks (symbol, name) VALUES ('GOOGL', 'Alphabet Inc.')");
-            stmt.execute("INSERT OR IGNORE INTO stocks (symbol, name) VALUES ('NVDA', 'NVIDIA Corporation')");
-            stmt.execute("INSERT OR IGNORE INTO stocks (symbol, name) VALUES ('AMZN', 'Amazon.com Inc.')");
+            stmt.execute("INSERT OR IGNORE INTO stocks (symbol, name) VALUES ('TULA', 'Tula Energy Corp')");
+            stmt.execute("INSERT OR IGNORE INTO stocks (symbol, name) VALUES ('PEARS', 'Pears Agriculture Ltd')");
+            stmt.execute("INSERT OR IGNORE INTO stocks (symbol, name) VALUES ('CORN', 'Corn Holdings Inc')");
+            stmt.execute("INSERT OR IGNORE INTO stocks (symbol, name) VALUES ('RICE', 'Rice Grain Industries')");
+            stmt.execute("INSERT OR IGNORE INTO stocks (symbol, name) VALUES ('GRAIN', 'Grain Technologies')")
 
             conn.commit();
             stmt.close();
@@ -194,7 +196,7 @@ public class DBHandler {
     }
 
     /**
-     * Create new user (signup)
+     * Create new usr signup block
      * Returns: user_id if successful, -1 if user already exists or error
      */
     public int createUser(String username, String password) {
