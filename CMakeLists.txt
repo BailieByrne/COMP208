@@ -116,7 +116,7 @@ elseif(APPLE OR UNIX)
 endif()
 
 # Add executable from Backend folder
-add_executable(stock_sim Backend/main.cpp)
+add_executable(stock_sim Backend/main.cpp Backend/AI.cpp)
 
 # Link Python library
 target_link_libraries(stock_sim ${Python3_LIBRARIES})

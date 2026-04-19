@@ -1,3 +1,4 @@
+#include "AI.h"
 #include <iostream>
 #include <cassert>
 #include <fstream>
@@ -13,15 +14,11 @@
 #include <mutex>
 #include <cstdint>
 
-
-class AI {
-public:
-    const int points = 510; // 510 minutes in a trading day (8:00 to 16:30)
-    /**
- * IMPORTANt:
- * Remove the logic from the constructor to avoid heavy computation
+/**
+ * Constructor implementation
+ * IMPORTANT: Remove the logic from the constructor to avoid heavy computation
  */
-    AI(double S0, double mu, double sigma, double sentiment, std::string ticker, int difficulty, std::uint64_t seedBase) {
+AI::AI(double S0, double mu, double sigma, double sentiment, std::string ticker, int difficulty, std::uint64_t seedBase) {
         /**
         AI will be passed the params to run monte carlo sim
         //Dependant on its difficulty is how many fixed points it will know.
@@ -37,13 +34,12 @@ public:
         std::uniform_real_distribution<double> dist(0.95, 1.05);
         this->S0 = S0;
         this->mu = mu * dist(gen); //Skew the drift by +-5% to make the AI less accurate and it will  make the game more fun and challenging
-
+        this ->sigma = sigma * dist(gen); //Skew the volatility by +-5% to make the AI less accurate and it will make the game more fun and challenging
 
         this->sentiment = sentiment;
         this->ticker = ticker;
         this->difficulty = difficulty;
         this->seedBase = seedBase;
-        this->final_price = final_price;
         Known_Points.push_back(std::make_tuple(0, S0)); 
         //The first point is always known as its the starting price.
         //Plus the first point is needed for brownian bridge segmentation.
@@ -55,35 +51,48 @@ public:
             case 1:
                 Known_Points_Amount = 3;
                 MonteCarloRuns = 1000;
+                tradingOperations = 8;
+                searchWindow = 20;
                 break;
             case 2:
                 Known_Points_Amount = 5;
                 MonteCarloRuns = 2000;
+                tradingOperations = 12;
+                searchWindow = 15;
                 break;
             case 3:
                 Known_Points_Amount = 10;
                 MonteCarloRuns = 5000;
+                tradingOperations = 16;
+                searchWindow = 10;
+                break;
                 break;
             case 4:
                 Known_Points_Amount = 20;
                 MonteCarloRuns = 10000;
+                tradingOperations = 14;
+                searchWindow = 5;
                 break;
             default:
                 Known_Points_Amount = 3;
-                MonteCarloRuns = 1000;           
+                MonteCarloRuns = 1000;  
+                tradingOperations = 8;   
+                searchWindow = 20;      
         };
         
     } 
-        
-    /**
-     * Logic Seperated from constructor
-     */
-    void run(){
+
+/**
+ * Logic Seperated from constructor
+ */
+void AI::run() {
         getKnownPoints(); //Populate the known points.
 
         //need the final price for the brownian bridge:
         // Known_Points.push_back(std::make_tuple(509, final_price)); 
         
+        std::cout << "AI constructor entry: S0=" << S0 << " mu=" << mu 
+              << " sigma=" << sigma << " sentiment=" << sentiment << "\n";
        
         //Ive scaled the monte carlo runs, i added mean fusing to preserver the overall shape of the monte carlo mean but added some randomness by fusing it with a random path and also taking the median path to prevent outliers dominating the prediction, this should give us a more realistic predicted path
         MonteCarloSimulate(MonteCarloRuns); 
@@ -91,14 +100,15 @@ public:
         //More runs is smoother line
         //now store the prediction in a CSV
         writeToCSV(); 
-    }
-    
-    /**
-     * IMPORTANT:
-     * THIS OPERATES IN LOG SPACE PRICES MUST BE log(price) 
-     * This is for the linear Guassian process
-     */
-    void getBrownianBridgeSegment(std::vector<double>& X,int t_start,int t_end,double X_start,double X_end,double alpha,double sigma,double dt,std::mt19937& gen){
+        writeSignalsToCSV(); //Write the trade signals to a separate CSV for the UI to read and display
+}
+
+/**
+ * IMPORTANT:
+ * THIS OPERATES IN LOG SPACE PRICES MUST BE log(price) 
+ * This is for the linear Guassian process
+ */
+void AI::getBrownianBridgeSegment(std::vector<double>& X,int t_start,int t_end,double X_start,double X_end,double alpha,double sigma,double dt,std::mt19937& gen){
             //gen the normal distribution
             std::normal_distribution<> dis(0.0, 1.0);
 
@@ -135,8 +145,8 @@ public:
             X[t_end] = X_end;
         }
 
-    void getKnownPoints() {
-        std::ifstream csv_file(this->ticker + std::string("_stock_prices.csv"));
+void AI::getKnownPoints() {
+    std::ifstream csv_file(this->ticker + std::string("_stock_prices.csv"));
         if (!csv_file.is_open()) {
             std::cerr << "Failed to open " << this->ticker << "_stock_prices.csv\n";
             return;
@@ -192,9 +202,9 @@ public:
         /**
          * OPTIONAL: Sort in place to increase efficiency, (100 points max is negligible but good practice)
          */
-    }
+}
 
-    void MonteCarloSimulate(int runs)
+void AI::MonteCarloSimulate(int runs)
 {
     assert(runs > 0);
 
@@ -331,8 +341,8 @@ public:
     }
 }
 
-    std::vector<double> predictGraph(std::mt19937& gen){
-        const int points = 510;
+std::vector<double> AI::predictGraph(std::mt19937& gen){
+    const int points = 510;
         assert(points > 1);
 
         //Need to do this redundant cast to keep DT a float
@@ -416,7 +426,7 @@ public:
     /**
      * Self Explanatory function
      */
-    void writeToCSV(){
+    void AI::writeToCSV(){
         std::ofstream csv_file(this->ticker + std::string("_predicted_prices.csv"));
         csv_file << "Time,Ticker,Price\n";
 
@@ -426,25 +436,216 @@ public:
         csv_file.close();
         std::cout << "Done";
     }
-private:
-    std::vector<double> Predicted_Prices;
-    int Known_Points_Amount = 0; //Default ammount
-    int MonteCarloRuns = 100; //Default ammount of monte carlo runs, can be changed for more accuracy but more runtime
-    std::vector<std::tuple<int, double>> Known_Points; //Vector of tuples to store the known points (time, price)
-    std::vector<double> MonteCarloMean;
-    std::vector<double> MonteCarloStdDev;
-    std::vector<std::vector<double>> AllMonteCarloPaths;
-    double S0;
-    double mu;
-    double sigma;
-    double sentiment;
-    std::string ticker;
-    int difficulty;
-    std::uint64_t seedBase = 0; //Default 0 as the base
-    double final_price; //Store all paths to compute median
-};
+
+    void AI::writeSignalsToCSV() {
+        std::cout << "\n=== AI Signals Debug ===" << std::endl;
+        std::cout << "Ticker: " << this->ticker << std::endl;
+        std::cout << "Predicted_Prices.size() = " << Predicted_Prices.size() << std::endl;
+        std::cout << "Difficulty: " << difficulty << std::endl;
+        std::cout << "Trading Operations: " << tradingOperations << std::endl;
+        
+        if (Predicted_Prices.empty()) {
+            std::cerr << "ERROR: Predicted_Prices is empty! Skipping signal generation.\n";
+            return;
+        }
+        
+        // Debug: show first and last prices
+        std::cout << "First price: " << Predicted_Prices[0] << ", Last price: " << Predicted_Prices.back() << std::endl;
+        
+        int window = searchWindow;
+        std::cout << "Window size: " << window << std::endl;
+        std::cout << "Search range: " << window << " to " << (Predicted_Prices.size() - window) << std::endl;
+        
+        std::vector<AISignal> signals = getTradeSignals(Predicted_Prices);
+        std::cout << "Found " << signals.size() << " signals\n";
+
+        std::ofstream csv_file(this->ticker + std::string("_ai_signals.csv"));
+        if (!csv_file.is_open()) {
+            std::cerr << "Failed to open " << this->ticker << "_ai_signals.csv\n";
+            return;
+        }
+
+        csv_file << "TimeIdx,Ticker,Action,PredictedPrice,Magnitude,Fraction\n";
+
+        for (const AISignal& signal : signals) {
+            double fraction = getKellyFraction(Predicted_Prices, signal.timeIdx, signal.type);
+
+            csv_file << signal.timeIdx << ","
+                     << this->ticker << ","
+                     << (signal.type == AISignal::BUY ? "BUY" : "SELL") << ","
+                     << signal.predictedPrice << ","
+                     << signal.magnitude << ","
+                     << fraction << "\n";
+        }
+
+        csv_file.close();
+        std::cout << "Signals written to " << this->ticker << "_ai_signals.csv\n";
+        std::cout << "==================\n\n";
+    }
+
+
+/** 
+ * Uses the well known kelly criterion to determine the optimal bet to trade
+ * This fits nicely in logspace with the GBM as a design choice
+ * k controls steepness, higher difficulty = steeper curve = more aggressive sizing.
+ * This lets the AI scale the buy and sells relative to the difficulty and signal strength.
+ */
+double AI::getKellyFraction(std::vector<double>& predictedPrices, int timeIdx, AISignal::Action signalType) {
+    int window = searchWindow;
+
+    int lookAhead = std::min(timeIdx + window, (int)predictedPrices.size() - 1);
+
+    double priceNow = predictedPrices[timeIdx];
+    double priceLater = predictedPrices[lookAhead];
+
+    //Stops /0 issues
+    if (priceNow <= 0.0) {
+        return 0.0;
+    };
+
+    // Expected return over the next index from lookahead
+    double expectedReturn = std::abs(priceLater - priceNow) / priceNow;
+
+    // Use price level stddev as the risk measure instead of log return variance
+    std::vector<double> windowPrices;
+    for (int i = timeIdx; i <= lookAhead; i++) {
+        windowPrices.push_back(predictedPrices[i]);
+    }
+
+    // Calculate mean and variance of the prices in the window
+    double meanP = std::accumulate(windowPrices.begin(), windowPrices.end(), 0.0) / windowPrices.size();
+    double variance = 0.0;
+    for (double p : windowPrices) {
+        variance += (p - meanP) * (p - meanP);
+    }
+    variance /= windowPrices.size();
+
+    // comparable to the expectedReturn percentage
+    double normalisedVariance = variance / (meanP * meanP);
+
+    // Floor at a realistic intraday volatility level (0.5% per window)
+    // prevents kelly saturating the sigmoid on smooth predicted paths
+    normalisedVariance = std::max(normalisedVariance, 0.0025);
+
+    //Guard for variance which killes kelly values.
+    if (normalisedVariance < 1e-8){
+        return 0.0;
+    }
+
+    double kelly = expectedReturn / normalisedVariance;
+
+
+    // sigmoid activation maps kelly into (-1 - 1) smoothly.
+    double k;
+    switch (difficulty) {
+        case 1: k = 0.8;  break;
+        case 2: k = 1.0; break;
+        case 3: k = 1.5;  break;
+        case 4: k = 1.75; break;
+        default: k = 0.8;
+    }
+
+    /**
+     * From testign kelly ranges where between 4-25 which was saturating the sigmoid hence the division to scale it down.
+     */
+    kelly /= 25.0;
+
+    //Sigmoid activation bounds between 1 and -1
+    kelly = (2.0 / (1.0 + std::exp(-k * kelly))) - 1.0;
+
+    // Direction from signal type, kelly is purely position sizing magnitude
+    if (signalType == AISignal::SELL) kelly = -kelly;
+
+    // Sigmoid already bounds to (-1, 1) but assert for safety
+    assert(kelly <= 1.0 && kelly >= -1.0);
+    return kelly;
+}
+    
 
 /**
- * TODO:
- * - Make the AI dumber even on diff 1 the l2 error is low, maybe add a +/-5% on the params passed from the GBM to decrease accuracy [DONE]
+ * Main fucn to read the predicted prices and generate the trades based on the signal
  */
+std::vector<AISignal> AI::getTradeSignals(const std::vector<double>& predictedPrices) {
+    std::vector<AISignal> allSignals;
+    int sizeOfPredicted = predictedPrices.size();
+
+    //Use predefiend window
+    int window = searchWindow;
+
+    /**
+     * Main loop to find the min an max points in the predicted prices, check that we arent self comapring too.
+     */
+    for (int i = window; i < sizeOfPredicted - window; i++) {
+        double currentPrice = predictedPrices[i];
+        bool isMin = true;
+        bool isMax = true;
+
+        for (int j = i - window; j <= i + window; j++) {
+            if (j == i) continue;
+            if (predictedPrices[j] < currentPrice) isMin = false;
+            if (predictedPrices[j] > currentPrice) isMax = false;
+        }
+
+        // Skip if the current price is the same as the previous price to avoid generating signals on flat lines
+        if (std::abs(currentPrice - predictedPrices[i - 1]) < 1e-6){
+            continue;
+        }
+
+        //Sets the sell
+        if (isMin)
+         {
+            allSignals.push_back({i, AISignal::BUY,  currentPrice, 0.0});
+        }
+        else if (isMax){
+            {allSignals.push_back({i, AISignal::SELL, currentPrice, 0.0});}
+        }
+
+    // Step 1: Enforce alternation on the full chronological list first
+    std::vector<AISignal> interleaved;
+    AISignal::Action expected = AISignal::BUY;
+
+    //Could optiimise dbut upon testing we had strings of buys and sells so forcing it to be interleaved then sort by magn.
+    for (int i = 0; i < (int)allSignals.size(); i++) {
+        if (allSignals[i].type == expected) {
+            interleaved.push_back(allSignals[i]);
+
+            //Ternary operation to flip expected type for next signal
+            expected = (expected == AISignal::BUY) ? AISignal::SELL : AISignal::BUY;
+        }
+    }
+
+    //I had an error where the parity for the kelly was off so this is a check to ensure the right size.
+    // Pairs are guaranteed BUY->SELL so i and i+1 are always a valid pair
+    for (int i = 0; i + 1 < (int)interleaved.size(); i++) {
+        double delta = std::abs(interleaved[i + 1].predictedPrice - interleaved[i].predictedPrice);
+        interleaved[i].magnitude = delta;
+        interleaved[i + 1].magnitude = delta;
+    }
+
+    //this grousp into BUY/SELL pairs, sort by magnitude descending, keep top N pairs
+    std::vector<std::pair<AISignal, AISignal>> pairs;
+    for (int i = 0; i + 1 < (int)interleaved.size(); i += 2) {
+        pairs.push_back({interleaved[i], interleaved[i + 1]});
+    }
+
+    //thansk COMP282 for the stable_sort reccomendation
+    std::stable_sort(pairs.begin(), pairs.end(), [](const std::pair<AISignal,AISignal>& a, const std::pair<AISignal,AISignal>& b) {
+        return a.first.magnitude > b.first.magnitude;
+    });
+
+    //This ensures theires enoiugh pairs so there isnt hanging buy or sells, and also has the operation limit as a cap.
+    int maxPairs = tradingOperations / 2;
+    if ((int)pairs.size() > maxPairs) pairs.resize(maxPairs);
+    std::vector<AISignal> result;
+    for (int i = 0; i < (int)pairs.size(); i++) {
+        result.push_back(pairs[i].first);
+        result.push_back(pairs[i].second);
+    }
+
+    //One final sort for chronology to ensure theyre in the right order.
+    std::stable_sort(result.begin(), result.end(), [](const AISignal& a, const AISignal& b) {
+        return a.timeIdx < b.timeIdx;
+    });
+
+    return result;
+}

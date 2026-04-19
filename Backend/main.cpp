@@ -9,7 +9,7 @@
 #include <cstring>
 #include <functional>
 #include <cstdint>
-#include "AI.cpp"
+#include "AI.h"
 
 
 //UUID Code i found generates a random V4 UUID, 2^122 possibile UUIDS
@@ -102,7 +102,7 @@ int main(int argc, char *argv[]) {
      */
     double mu = 0.05;       // Drift
     double sigma = 0.4;     // Volatility
-    double sentiment = 0.0; // Market sentiment
+    double sentiment = 1.0; // Market sentiment
 
 
     //spit out the Seed for debugging and reproducibility
@@ -141,8 +141,9 @@ int main(int argc, char *argv[]) {
     
     csv_file.close();
 
-    // Create the AI with provided difficulty
+    std::cout << "Calling AI constructor with sigma=" << sigma << "\n";
     AI ai(S0, mu, sigma, sentiment, ticker, difficulty, numericSeed);
+    // Create the AI with provided difficulty
     // Since seperating the logic from the constructor, we need to call the run function to execute the AI run
     ai.run();
 

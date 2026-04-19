@@ -590,6 +590,7 @@ public class ServerController {
                                    String.valueOf(startingPrice), seed};
                     
                     ProcessBuilder pb = new ProcessBuilder(cmd);
+                    pb.directory(new File("."));
                     pb.redirectErrorStream(true);
                     Process process = pb.start();
                     
@@ -637,6 +638,7 @@ public class ServerController {
                                     String[] cmd = {"Backend/build/bin/Release/stock_sim.exe", ticker,
                                                    String.valueOf(difficulty), "500.0", seed};
                                     ProcessBuilder pb = new ProcessBuilder(cmd);
+                                    pb.directory(new File("."));
                                     pb.redirectErrorStream(true);
                                     Process process = pb.start();
                                     process.waitFor();
@@ -726,6 +728,7 @@ public class ServerController {
                                 String[] cmd = {"Backend/build/bin/Release/stock_sim.exe", nextTicker,
                                                String.valueOf(difficulty), "500.0", newSeed};
                                 ProcessBuilder pb = new ProcessBuilder(cmd);
+                                pb.directory(new File("."));
                                 pb.redirectErrorStream(true);
                                 Process process = pb.start();
                                 int exitCode = process.waitFor();

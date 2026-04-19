@@ -8,8 +8,12 @@ import javafx.stage.Stage;
 import java.io.*;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+//Neccesary imports for JavaFX and networking
 
+
+//Client class extends Application from JavaFX library
 public class client extends Application {
+    //Main priv attrubutes for the stage and client class et
     private static client instance;
     private Stage primaryStage;
     private Socket socket;
@@ -37,7 +41,7 @@ public class client extends Application {
     }
 
     /**
-     * Safe method to open a screen - closes current screen and shows new one
+     * Safe method to open a screen , this one will close current screen and shows new one
      * Prevents memory leaks and ensures fullscreen display
      */
     private synchronized void openScreen(String fxmlFileName, String screenName) {
@@ -66,6 +70,7 @@ public class client extends Application {
                 primaryStage.toFront();
                 primaryStage.requestFocus();
 
+                //Update the current screen
                 currentScreen = newScreen;
                 System.out.println("Screen loaded: " + screenName);
             } catch (Exception e) {
@@ -81,6 +86,7 @@ public class client extends Application {
     private void connectToServer() {
         new Thread(() -> {
             try {
+                //As of now use localhost, plans to move this to online hosting in the future
                 socket = new Socket("localhost", 5000);
                 out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
                 in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
@@ -120,6 +126,7 @@ public class client extends Application {
     /**
      * Parse and handle packets from server
      * Packet format: TYPE|data1|data2|...
+     * Packets are disected by | and the first arg determines the type, the rest are agrv similar
      */
     private void handlePacket(String packet) {
         if (packet == null || packet.isEmpty()) return;
@@ -127,6 +134,9 @@ public class client extends Application {
         String[] parts = packet.split("\\|");
         String packetType = parts[0];
 
+        /**
+         * Big switch case wrapped in a try block to catch errors or malformed packets.
+         */
         try {
             switch (packetType) {
                 case "LOGIN_SUCCESS":
@@ -183,6 +193,10 @@ public class client extends Application {
         }
     }
 
+    /**
+     * Self Explanatory, handles the successful login and shows main menu, and wairs for active gamne
+     * @param parts
+     */
     private void handleLoginSuccess(String[] parts) {
         System.out.println("Login successful for user: " + (parts.length > 1 ? parts[1] : ""));
         // Don't show main menu yet - wait for ACTIVE_GAMES/GAME_INFO packets
@@ -199,25 +213,46 @@ public class client extends Application {
                 // Ignore
             }
         }).start();
+        //Try the thread, error isnt caught so arrises as an error (intended)
     }
 
+    /**
+     * Handles failed login attempts, shows error message on login screen
+     * @param parts
+     * Doesnt retur anything
+     */
     private void handleLoginFailed(String[] parts) {
         String reason = parts.length > 1 ? parts[1] : "Invalid credentials";
         System.out.println("Login failed: " + reason);
         Platform.runLater(() -> showLoginError(reason));
     }
 
+    /**#
+     * Handles successful signup shows main menu immediately since no active game can exist for new user
+      * @param parts
+     */
     private void handleSignupSuccess(String[] parts) {
         System.out.println("Signup successful");
         Platform.runLater(this::showMainMenuScreen);
     }
 
+    /**
+     * Handles failed signup attempts shows error message on login screen given the reason
+     * @param parts
+     */
     private void handleSignupFailed(String[] parts) {
         String reason = parts.length > 1 ? parts[1] : "Signup failed";
         System.out.println("Signup failed: " + reason);
         Platform.runLater(() -> showLoginError(reason));
     }
 
+    /**
+     * Server checks for active games on login
+     * -If detected the server will send ACTIVE_GAMES|count followed by GAME_INFO packets for each active game.
+     * -If no active games are detected the server will send ACTIVE_GAMES|0 and the client should show the main menu immediately.
+     * The main menu adpats dependant on a current game saved or no with RESUME/START options
+     * @param parts
+     */
     private void handleActiveGames(String[] parts) {
         // Format: ACTIVE_GAMES|count
         int count = parts.length > 1 ? Integer.parseInt(parts[1]) : 0;
@@ -232,6 +267,13 @@ public class client extends Application {
         // If count > 0, wait for GAME_INFO packets
     }
 
+
+
+/**
+ * Handles game info packets sent by the server for each active game detected on login
+ * Sends game info like difficulty and current day, this is used to update the main menu with the correct info for resuming games
+ * @param parts
+ */
     private void handleGameInfo(String[] parts) {
         // Format: GAME_INFO|game_id|difficulty|current_day|player_cash|ai_cash
         if (parts.length >= 4) {
@@ -252,6 +294,12 @@ public class client extends Application {
         }
     }
 
+
+    /**
+     * IMPORTANT
+     * Handles the start of thr new game, resets active game flags and vars for the new game
+     * @param parts
+     */
     private void handleGameStart(String[] parts) {
         System.out.println("Game started - showing Cycle 1");
         // Clear active game flags since a new game is starting
@@ -261,6 +309,10 @@ public class client extends Application {
         Platform.runLater(() -> openScreen("COMP208GameUI.fxml", "Game UI - Cycle 1"));
     }
 
+    /**
+     * Handles resuming an active game sets active game flags and vars for the resumed game and opens the correct screen for the current day of the game.
+     * @param parts
+     */
     private void handleGameResumed(String[] parts) {
         if (parts.length < 4) return;
         try {
@@ -280,6 +332,7 @@ public class client extends Application {
         }
     }
 
+    //These ocur between cycles and thus self exmplanatory, just opens the correct screen for the current cycle of the game
     private void handlePhaseChange(String[] parts) {
         if (parts.length < 2) return;
         String phase = parts[1];
@@ -297,12 +350,15 @@ public class client extends Application {
         }
     }
 
+    /**
+     * Handles price updates from the server updates the game UI with the new price data
+     * @param parts
+     */
     private void handlePriceUpdate(String[] parts) {
         if (parts.length < 4) return;
         String ticker = parts[1];
         double price = Double.parseDouble(parts[2]);
         int point = Integer.parseInt(parts[3]);
-        System.out.println("Price update: " + ticker + " @ $" + price + " (point " + point + ")");
         
         // Update the current GameUIController if it's active
         if (currentController instanceof GameUIController) {
@@ -311,11 +367,15 @@ public class client extends Application {
         }
     }
 
-    private void handlePortfolioUpdate(String[] parts) {
+    /**
+     * This is called after BUYS/SELLS to update the UI with the msot up to date data
+     * @param parts
+     */    private void handlePortfolioUpdate(String[] parts) {
         // Format: PORTFOLIO_UPDATE|cash|ticker1:qty1:price1|ticker2:qty2:price2|...
         if (parts.length < 2) return;
         String cash = parts[1];
         
+        //Consider moving this List instance into global scope.
         java.util.List<GameUIController.PortfolioEntry> holdings = new java.util.ArrayList<>();
         for (int i = 2; i < parts.length; i++) {
             String[] entry = parts[i].split(":");
@@ -342,6 +402,8 @@ public class client extends Application {
         System.out.println("Received game data update");
     }
 
+    //Handles the end game
+    //RunLater is used to hook into the JAVAFX thread for auto cleanup.
     private void handleGameEnd(String[] parts) {
         System.out.println("Game ended");
         Platform.runLater(this::showMainMenuScreen);
@@ -364,6 +426,7 @@ public class client extends Application {
     }
 
     // ==================== Public API Methods ====================
+    //These should be mostly self explanatory.
 
     public static client getInstance() {
         return instance;
@@ -413,7 +476,6 @@ public class client extends Application {
             if (currentController instanceof MainMenuController) {
                 MainMenuController controller = (MainMenuController) currentController;
                 controller.applySavedGameState(false, hasActiveGame, null, activeGameDay, activeGameDifficulty);
-                System.out.println("Main menu updated - hasActiveGame=" + hasActiveGame);
             }
         });
     }
@@ -461,11 +523,11 @@ public class client extends Application {
     // ==================== Helper Methods ====================
 
     private void sendPacket(String packet) {
-        /**ring -> bytes[] 
-         * St
+        /**String -> bytes[] 
          * Turn to bytes[]
          * - Add a checksum
          * - then send it
+         * USe UTF8 for this @LEO + @RADU
          */
         if (out != null) {
             out.println(packet);
