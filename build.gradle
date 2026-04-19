@@ -30,11 +30,13 @@ dependencies {
 sourceSets {
     main {
         java {
-            srcDirs = ['Server', 'client']
+           // srcDirs = ['Server', 'client']
+            srcDirs += ['Fin_Stuff']
         }
         resources {
             srcDirs = ['client/Assets']
         }
+        
     }
 }
 
