@@ -122,10 +122,38 @@ public class client extends Application {
      * Packet format: TYPE|data1|data2|...
      */
     private void handlePacket(String packet) {
-        if (packet == null || packet.isEmpty()) return;
+         if(packet == null || packet.isEmpty()){
+            return;
+        }
 
         String[] parts = packet.split("\\|");
+
+        //validating checksum
+        if(parts.length > 1){
+            try{
+                int rcvdCheck = Integer.parseInt(parts[parts.length - 1]);
+
+                //rebuild packet wout checksum
+                String[] fracParts = new String[parts.length - 1];
+                System.arraycopy(parts, 0, fracParts, 0, parts.length - 1);
+                String data = String.join("|", fracParts);
+
+                //verify checksum
+                int calculatedCheckSum = calculateCheckSum(data);
+                if(rcvdCheck != calculatedCheckSum){
+                    System.err.println("Checksum mismatch: packet corrupted");
+                    sendPacket("ERROR|CHECKSUM_FAILED");
+                    return;
+                }
+
+                parts = fracParts;
+            }
+            catch(NumberFormatException e){
+                System.out.println("No checksum found -- continuing");
+            }
+        }
         String packetType = parts[0];
+
 
         try {
             switch (packetType) {
@@ -459,6 +487,15 @@ public class client extends Application {
         sendPacket("SELL_ALL|" + ticker + "|" + price);
     }
     // ==================== Helper Methods ====================
+    // I'll work on sending the packets - radu
+    
+    private int calculateCheckSum(String data){
+        int sum = 0;
+        for(char c : data.toCharArray()){
+            sum += (int) c;
+        }
+        return sum;
+    }
 
     private void sendPacket(String packet) {
         /**ring -> bytes[] 
@@ -467,8 +504,22 @@ public class client extends Application {
          * - Add a checksum
          * - then send it
          */
-        if (out != null) {
-            out.println(packet);
+        if (out != null && connected) {
+            try{
+                int checksum = calculateCheckSum(packet);
+
+                String pktCheck = packet + "|" + checksum;
+
+                out.println(pktCheck);
+                System.out.println("Sent packet: " + packet + "checksum: " + checksum);
+            }
+            catch (Exception e){
+                System.err.println("Failed to send packet: " + e.getMessage());
+                connected = false;
+            }
+        }
+        else{
+            showErrorDialog("Cannot send packet - not connected to the server.");
         }
     }
 
