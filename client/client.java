@@ -54,7 +54,7 @@ public class client extends Application {
                 currentController = null;
 
                 // Load new FXML file
-                FXMLLoader loader = new FXMLLoader(getClass().getResource("Assets/" + fxmlFileName));
+                FXMLLoader loader = new FXMLLoader(getClass().getResource("/Assets/" + fxmlFileName));
                 Parent newScreen = loader.load();
                 currentController = loader.getController();
 

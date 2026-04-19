@@ -1,76 +1,77 @@
 plugins {
     id 'java'
+    id 'application'
     id 'org.openjfx.javafxplugin' version '0.1.0'
-}
-
-group = 'com.stock'
-version = '1.0'
-
-java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
-}
-
-javafx {
-    version = "17.0.18"
-    modules = ['javafx.controls', 'javafx.fxml', 'javafx.graphics']
-}
-
-wrapper {
-    gradleVersion = '8.11'
 }
 
 repositories {
     mavenCentral()
 }
 
+javafx {
+    version = '17.0.11'
+    modules = ['javafx.controls', 'javafx.fxml', 'javafx.graphics', 'javafx.media', 'javafx.swing', 'javafx.web']
+}
+
 dependencies {
-    // JavaFX (managed by plugin)
-    
-    // CSV handling
+    implementation 'org.xerial:sqlite-jdbc:3.46.0.0'
+    implementation 'org.slf4j:slf4j-api:2.0.13'
+    implementation 'org.slf4j:slf4j-simple:2.0.13'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.0'
+    implementation 'com.fasterxml.jackson.core:jackson-core:2.17.0'
+    implementation 'com.fasterxml.jackson.core:jackson-annotations:2.17.0'
     implementation 'org.apache.commons:commons-csv:1.10.0'
-    
-    // JSON processing
-    implementation 'com.fasterxml.jackson.core:jackson-databind:2.15.2'
-    implementation 'com.fasterxml.jackson.core:jackson-core:2.15.2'
-    
-    // SQLite
-    implementation 'org.xerial:sqlite-jdbc:3.43.0.0'
 }
 
 sourceSets {
     main {
         java {
-            srcDirs = ['Server', 'client']
+            srcDirs = ['client', 'Server']
         }
         resources {
             srcDirs = ['client']
+            includes = ['Assets/**']
         }
     }
 }
 
-tasks.named('processResources') {
-    from 'client/Assets'
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
 }
 
-tasks.named('compileJava') {
-    options.encoding = 'UTF-8'
+application {
+    mainClass = 'client'
 }
 
-// Run client task with JavaFX modules
 tasks.register('runClient', JavaExec) {
+    group = 'application'
+    description = 'Run the JavaFX client'
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'client'
-    
-    // Add JavaFX modules
     jvmArgs = [
-        '--module-path', classpath.asPath,
-        '--add-modules', 'javafx.controls,javafx.fxml,javafx.graphics'
+        '--module-path', configurations.runtimeClasspath.asPath,
+        '--add-modules', 'javafx.controls,javafx.fxml,javafx.graphics,javafx.media,javafx.swing,javafx.web'
     ]
 }
 
-// Run server task
 tasks.register('runServer', JavaExec) {
+    group = 'application'
+    description = 'Run the server on port 5000'
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'main'
+    standardInput = System.in
+}
+
+tasks.register('serverJar', Jar) {
+    group = 'build'
+    archiveBaseName = 'server'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    manifest { attributes 'Main-Class': 'main' }
+    from {
+        configurations.runtimeClasspath
+            .findAll { !it.name.contains('javafx') }
+            .collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    with jar
 }
