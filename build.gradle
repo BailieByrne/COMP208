@@ -1,5 +1,6 @@
 plugins {
     id 'java'
+    id 'org.openjfx.javafxplugin' version '0.1.0'
 }
 
 group = 'com.stock'
@@ -10,19 +11,31 @@ java {
     targetCompatibility = JavaVersion.VERSION_17
 }
 
+javafx {
+    version = "17.0.18"
+    modules = ['javafx.controls', 'javafx.fxml', 'javafx.graphics']
+}
+
 wrapper {
     gradleVersion = '8.11'
 }
 
 repositories {
+    mavenCentral()
 }
 
 dependencies {
-    // Using local JavaFX SDK from Deps folder
-    implementation fileTree(dir: 'Deps/javafx-sdk-17.0.18/lib', include: '*.jar')
-    implementation fileTree(dir: 'Deps/sqlite', include: '*.jar')
-    implementation fileTree(dir: 'Deps/jackson', include: '*.jar')
-    implementation fileTree(dir: 'Deps/commons-csv', include: '*.jar')
+    // JavaFX (managed by plugin)
+    
+    // CSV handling
+    implementation 'org.apache.commons:commons-csv:1.10.0'
+    
+    // JSON processing
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.15.2'
+    implementation 'com.fasterxml.jackson.core:jackson-core:2.15.2'
+    
+    // SQLite
+    implementation 'org.xerial:sqlite-jdbc:3.43.0.0'
 }
 
 sourceSets {
@@ -31,11 +44,33 @@ sourceSets {
             srcDirs = ['Server', 'client']
         }
         resources {
-            srcDirs = ['client/Assets']
+            srcDirs = ['client']
         }
     }
 }
 
+tasks.named('processResources') {
+    from 'client/Assets'
+}
+
 tasks.named('compileJava') {
     options.encoding = 'UTF-8'
+}
+
+// Run client task with JavaFX modules
+tasks.register('runClient', JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'client'
+    
+    // Add JavaFX modules
+    jvmArgs = [
+        '--module-path', classpath.asPath,
+        '--add-modules', 'javafx.controls,javafx.fxml,javafx.graphics'
+    ]
+}
+
+// Run server task
+tasks.register('runServer', JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'main'
 }

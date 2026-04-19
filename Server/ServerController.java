@@ -144,7 +144,37 @@ public class ServerController {
         private void handlePacket(String packet) {
             if (packet == null || packet.isEmpty()) return;
 
-            String[] parts = packet.split("\\|");
+            // Expected format: PAYLOAD|CHECKSUM
+            int lastSeparator = packet.lastIndexOf('|');
+            if (lastSeparator <= 0 || lastSeparator == packet.length() - 1) {
+            System.err.println("Invalid packet format (missing checksum): " + packet);
+            sendPacket("ERROR|Invalid packet format");
+            return;
+            }
+
+            String payload = packet.substring(0, lastSeparator);
+            String checksumText = packet.substring(lastSeparator + 1).trim();
+
+            int receivedChecksum;
+            try {
+            receivedChecksum = Integer.parseInt(checksumText);
+            } catch (NumberFormatException e) {
+            System.err.println("Invalid checksum value: " + checksumText);
+            sendPacket("ERROR|Invalid checksum");
+            return;
+            }
+
+            int calculatedChecksum = calculateCheckSum(payload);
+            if (receivedChecksum != calculatedChecksum) {
+            System.err.println("Checksum mismatch. Received: " + receivedChecksum +
+                       ", Calculated: " + calculatedChecksum +
+                       ", Payload: " + payload);
+            sendPacket("ERROR|Checksum mismatch");
+            return;
+            }
+
+            // Checksum is valid, now parse packet payload
+            String[] parts = payload.split("\\|");
             String packetType = parts[0];
 
             /**
@@ -514,7 +544,8 @@ public class ServerController {
          */
         private void sendPacket(String packet) {
             if (out != null) {
-                out.println(packet);
+                int checksum = calculateCheckSum(packet);
+                out.println(packet + "|" + checksum);
             }
         }
 
@@ -815,6 +846,17 @@ public class ServerController {
                 System.err.println("Error handling game completion: " + e.getMessage());
                 sendPacket("ERROR|Game completion error");
             }
+        }
+
+        /**
+         * Calculate checksum for payload validation
+         */
+        private int calculateCheckSum(String payload) {
+            int checksum = 0;
+            for (char c : payload.toCharArray()) {
+                checksum += c;
+            }
+            return checksum;
         }
 
         /**

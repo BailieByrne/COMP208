@@ -597,8 +597,9 @@ std::vector<AISignal> AI::getTradeSignals(const std::vector<double>& predictedPr
             allSignals.push_back({i, AISignal::BUY,  currentPrice, 0.0});
         }
         else if (isMax){
-            {allSignals.push_back({i, AISignal::SELL, currentPrice, 0.0});}
+            allSignals.push_back({i, AISignal::SELL, currentPrice, 0.0});
         }
+    }
 
     // Step 1: Enforce alternation on the full chronological list first
     std::vector<AISignal> interleaved;
