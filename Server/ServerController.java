@@ -440,6 +440,9 @@ public class ServerController {
                 
                 System.out.println("Game " + gameId + ": BUY " + quantity + " x " + ticker + " @ £" + price + " = £" + totalCost + " | Cash: £" + playerCash + " -> £" + newCash);
                 
+                // Log trade action to database
+                server.dbHandler.logTradeAction(userId, gameId, currentDay, "BUY", stockId, quantity, price);
+                
                 sendPortfolioUpdate();
                 sendAIPortfolioUpdate();
             } catch (Exception e) {
@@ -492,6 +495,9 @@ public class ServerController {
                 
                 System.out.println("Game " + gameId + ": SELL " + quantity + " x " + ticker + " @ £" + price + " = £" + totalProceeds + " | Cash: £" + playerCash + " -> £" + newCash);
                 
+                // Log trade action to database
+                server.dbHandler.logTradeAction(userId, gameId, currentDay, "SELL", stockId, quantity, price);
+                
                 sendPortfolioUpdate();
                 sendAIPortfolioUpdate();
             } catch (Exception e) {
@@ -538,6 +544,9 @@ public class ServerController {
                 System.out.println("Game " + gameId + ": SELL_ALL " + currentHolding + " x " + ticker + " @ £" + 
                     String.format("%.3f", price) + " = £" + String.format("%.2f", cashFromSale) + 
                     " | Cash: £" + String.format("%.2f", playerCash) + " -> £" + String.format("%.2f", newCash));
+                
+                // Log trade action to database
+                server.dbHandler.logTradeAction(userId, gameId, currentDay, "SELL_ALL", stockId, currentHolding, price);
                 
                 sendPortfolioUpdate();
                 sendAIPortfolioUpdate();
