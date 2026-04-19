@@ -7,7 +7,7 @@ from datetime import datetime
 
 exe = Path("/Users/sarinasaiyed/COMP208/Backend/program")
 outer_folder = Path("/Users/sarinasaiyed/COMP208/Sarinas-Testing/outputs")
-runs = 75
+runs = 100
 
 def run_simulation():  
     if not outer_folder.exists():
