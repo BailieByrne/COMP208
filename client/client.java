@@ -200,6 +200,9 @@ public class client extends Application {
                 case "PORTFOLIO_UPDATE":
                     handlePortfolioUpdate(parts);
                     break;
+                case "AI_PORTFOLIO_UPDATE":
+                    handleAIPortfolioUpdate(parts);
+                    break;
                 case "GAME_DATA":
                     handleGameData(parts);
                     break;
@@ -422,6 +425,37 @@ public class client extends Application {
         if (currentController instanceof GameUIController) {
             GameUIController controller = (GameUIController) currentController;
             Platform.runLater(() -> controller.updatePortfolio(cash, holdings));
+        }
+    }
+
+    /**
+     * Handles AI portfolio updates from the server
+     * Format: AI_PORTFOLIO_UPDATE|cash|ticker1:qty1:price1|ticker2:qty2:price2|...
+     * @param parts
+     */
+    private void handleAIPortfolioUpdate(String[] parts) {
+        // Format: AI_PORTFOLIO_UPDATE|cash|ticker1:qty1:price1|ticker2:qty2:price2|...
+        if (parts.length < 2) return;
+        String aiCash = parts[1];
+        
+        java.util.List<GameUIController.PortfolioEntry> aiHoldings = new java.util.ArrayList<>();
+        for (int i = 2; i < parts.length; i++) {
+            String[] entry = parts[i].split(":");
+            if (entry.length == 3) {
+                try {
+                    String ticker = entry[0];
+                    int quantity = Integer.parseInt(entry[1]);
+                    double price = Double.parseDouble(entry[2]);
+                    aiHoldings.add(new GameUIController.PortfolioEntry(ticker, quantity, price));
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
+        
+        // Update the GameUIController if it's active
+        if (currentController instanceof GameUIController) {
+            GameUIController controller = (GameUIController) currentController;
+            Platform.runLater(() -> controller.updateAIPortfolio(aiCash, aiHoldings));
         }
     }
 

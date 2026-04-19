@@ -21,6 +21,7 @@ public class GameUIController {
     @FXML private Label labelTime;
     @FXML private Label lblCash;
     @FXML private Label labelNetWorth;
+    @FXML private Label lblAICash;
     @FXML private LineChart<Number, Number> ChartUser;
     @FXML private LineChart<Number, Number> ChartAI;
     @FXML private NumberAxis ChartUserXAxis;
@@ -33,6 +34,10 @@ public class GameUIController {
     @FXML private TableColumn<PortfolioItem, String> colTicker;
     @FXML private TableColumn<PortfolioItem, Integer> colQty;
     @FXML private TableColumn<PortfolioItem, String> colValue;
+    @FXML private TableView<PortfolioItem> tableAIHoldings;
+    @FXML private TableColumn<PortfolioItem, String> colAITicker;
+    @FXML private TableColumn<PortfolioItem, Integer> colAIQty;
+    @FXML private TableColumn<PortfolioItem, String> colAIValue;
     @FXML private javafx.scene.control.Button btnBuy;
     @FXML private javafx.scene.control.Button btnSell;
     @FXML private javafx.scene.control.Button btnSellAll;
@@ -114,6 +119,9 @@ public class GameUIController {
         if (labelNetWorth != null) {
             labelNetWorth.setText("Net Worth: £0.00");
         }
+        if (lblAICash != null) {
+            lblAICash.setText("AI Cash: £0.00");
+        }
 
         // Initialize portfolio table
         if (tableHoldings != null) {
@@ -127,6 +135,20 @@ public class GameUIController {
                 colValue.setCellValueFactory(new PropertyValueFactory<>("value"));
             }
             tableHoldings.setItems(FXCollections.observableArrayList());
+        }
+
+        // Initialize AI portfolio table
+        if (tableAIHoldings != null) {
+            if (colAITicker != null) {
+                colAITicker.setCellValueFactory(new PropertyValueFactory<>("ticker"));
+            }
+            if (colAIQty != null) {
+                colAIQty.setCellValueFactory(new PropertyValueFactory<>("quantity"));
+            }
+            if (colAIValue != null) {
+                colAIValue.setCellValueFactory(new PropertyValueFactory<>("value"));
+            }
+            tableAIHoldings.setItems(FXCollections.observableArrayList());
         }
 
         // Initialize buy/sell buttons
@@ -481,6 +503,40 @@ public class GameUIController {
                         labelNetWorth.setText("Net Worth: £" + String.format("%.2f", totalValue));
                     }
                 }
+            }
+        });
+    }
+
+    public void updateAIPortfolio(String aiCash, List<PortfolioEntry> aiHoldings) {
+        runOnFxThread(() -> {
+            // Update AI cash label
+            if (lblAICash != null) {
+                try {
+                    double cashAmount = Double.parseDouble(aiCash);
+                    lblAICash.setText("AI Cash: £" + String.format("%.2f", cashAmount));
+                } catch (NumberFormatException e) {
+                    lblAICash.setText("AI Cash: £" + aiCash);
+                }
+            }
+
+            // Update AI holdings table
+            if (tableAIHoldings != null) {
+                ObservableList<PortfolioItem> items = FXCollections.observableArrayList();
+
+                if (aiHoldings != null) {
+                    for (PortfolioEntry entry : aiHoldings) {
+                        // Use server's price if available, otherwise use last streamed price
+                        double price = entry.currentPrice > 0 ? entry.currentPrice : lastPricePerTicker.getOrDefault(entry.ticker, 0.0);
+                        double value = entry.quantity * price;
+                        items.add(new PortfolioItem(
+                            entry.ticker,
+                            entry.quantity,
+                            String.format("£%.2f", value)
+                        ));
+                    }
+                }
+
+                tableAIHoldings.setItems(items);
             }
         });
     }

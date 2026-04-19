@@ -96,6 +96,10 @@ public class ServerController {
         private int currentDay = 1;
         private int difficulty = 1;
         private final Map<String, Double> lastPricePerTicker = new java.util.concurrent.ConcurrentHashMap<>();
+        // AI signals: Map<ticker, List<int[]>> where int[] = {timeIdx, actionType} (0=BUY, 1=SELL)
+        private final Map<String, List<int[]>> aiSignals = new HashMap<>();
+        // Lock for synchronizing AI trade execution across parallel ticker threads
+        private final Object tradeLock = new Object();
 
         public ClientHandler(Socket socket, ServerController server) {
             this.socket = socket;
@@ -311,6 +315,7 @@ public class ServerController {
                         sendPacket("GAME_START|" + gameId + "|" + difficulty);
                         sendPacket("PHASE|CYCLE_1");
                         sendPortfolioUpdate();
+                        sendAIPortfolioUpdate();
                         
                         // Send initial portfolio with starting cash
                         
@@ -356,6 +361,7 @@ public class ServerController {
                 
                 // Send initial portfolio
                 sendPortfolioUpdate();
+                sendAIPortfolioUpdate();
                 
                 // Resume price streaming from current day
                 new Thread(() -> streamGamePrices(gameId, null)).start();
@@ -394,6 +400,7 @@ public class ServerController {
                 if (playerCash < totalCost) {
                     sendPacket("ERROR|Insufficient cash: need £" + String.format("%.2f", totalCost) + " but have £" + String.format("%.2f", playerCash));
                     sendPortfolioUpdate();
+                    sendAIPortfolioUpdate();
                     return;
                 }
                 
@@ -411,6 +418,7 @@ public class ServerController {
                 System.out.println("Game " + gameId + ": BUY " + quantity + " x " + ticker + " @ £" + price + " = £" + totalCost + " | Cash: £" + playerCash + " -> £" + newCash);
                 
                 sendPortfolioUpdate();
+                sendAIPortfolioUpdate();
             } catch (Exception e) {
                 sendPacket("ERROR|" + e.getMessage());
                 e.printStackTrace();
@@ -446,6 +454,7 @@ public class ServerController {
                 if (currentHolding < quantity) {
                     sendPacket("ERROR|Insufficient holdings: have " + currentHolding + " but trying to sell " + quantity);
                     sendPortfolioUpdate();
+                    sendAIPortfolioUpdate();
                     return;
                 }
                 
@@ -461,6 +470,7 @@ public class ServerController {
                 System.out.println("Game " + gameId + ": SELL " + quantity + " x " + ticker + " @ £" + price + " = £" + totalProceeds + " | Cash: £" + playerCash + " -> £" + newCash);
                 
                 sendPortfolioUpdate();
+                sendAIPortfolioUpdate();
             } catch (Exception e) {
                 sendPacket("ERROR|" + e.getMessage());
                 e.printStackTrace();
@@ -507,6 +517,7 @@ public class ServerController {
                     " | Cash: £" + String.format("%.2f", playerCash) + " -> £" + String.format("%.2f", newCash));
                 
                 sendPortfolioUpdate();
+                sendAIPortfolioUpdate();
             } catch (Exception e) {
                 sendPacket("ERROR|" + e.getMessage());
             }
@@ -535,6 +546,40 @@ public class ServerController {
                 sendPacket(packet.toString());
             } catch (Exception e) {
                 System.err.println("Error sending portfolio update: " + e.getMessage());
+                e.printStackTrace();
+            }
+        }
+
+        /**
+         * Send AI portfolio update to the client
+         * Format: AI_PORTFOLIO_UPDATE|cash|ticker1:qty1:price1|...
+         */
+        private void sendAIPortfolioUpdate() {
+            try {
+                // Get current game data from DB
+                Map<String, Object> gameState = server.dbHandler.getGameData(gameId);
+                double aiCash = ((Number) gameState.get("ai_cash")).doubleValue();
+                
+                // Format: AI_PORTFOLIO_UPDATE|cash|ticker1:qty1:price1|...
+                StringBuilder packet = new StringBuilder("AI_PORTFOLIO_UPDATE|" + String.format("%.2f", aiCash));
+                String[] stocks = {"AAPL", "TSLA", "GOOGL", "NVDA", "AMZN"};
+                
+                // Get AI portfolio holdings from database
+                Map<Integer, Integer> aiPortfolio = server.dbHandler.getAIPortfolio(gameId);
+                
+                // Add all unlocked stocks for current day with AI holdings and latest price
+                for (int i = 0; i < currentDay && i < stocks.length; i++) {
+                    String ticker = stocks[i];
+                    int stockId = server.dbHandler.getStockId(ticker);
+                    int holding = aiPortfolio.getOrDefault(stockId, 0);
+                    // Use the last streamed price for this ticker, or 0 if not yet streamed
+                    double price = lastPricePerTicker.getOrDefault(ticker, 0.0);
+                    packet.append("|").append(ticker).append(":").append(holding).append(":").append(String.format("%.2f", price));
+                }
+                
+                sendPacket(packet.toString());
+            } catch (Exception e) {
+                System.err.println("Error sending AI portfolio update: " + e.getMessage());
                 e.printStackTrace();
             }
         }
@@ -689,6 +734,11 @@ public class ServerController {
                         }
                     }
                     
+                    // Load AI signals for all tickers available this day
+                    for (int i = 0; i < currentDay && i < allTickers.length; i++) {
+                        loadAISignals(allTickers[i], currentDay);
+                    }
+                    
                     // Stream all available tickers for this day IN PARALLEL
                     List<Thread> streamingThreads = new ArrayList<>();
                     for (int i = 0; i < currentDay && i < allTickers.length; i++) {
@@ -697,6 +747,7 @@ public class ServerController {
                         // Create a thread for each ticker to stream prices in parallel
                         Thread streamThread = new Thread(() -> {
                             try {
+                                
                                 // Wait for C++ to finish generating CSV if needed
                                 Thread.sleep(1000);
                                 
@@ -711,17 +762,24 @@ public class ServerController {
                                 while ((line = csvReader.readLine()) != null && sendCount < 102) {
                                     pointCount++;
                                     
-                                    // Send every 5th point
-                                    if (pointCount % 5 == 0) {
-                                        String[] parts = line.split(",");
-                                        if (parts.length >= 3) {
-                                            double price = Double.parseDouble(parts[2]);
-                                            lastPricePerTicker.put(ticker, price);  // Track latest price
+                                    String[] parts = line.split(",");
+                                    if (parts.length >= 3) {
+                                        double price = Double.parseDouble(parts[2]);
+                                        
+                                        // 1. Always track the most recent price for portfolio calculations
+                                        lastPricePerTicker.put(ticker, price);
+                                        
+                                        // 2. Always check for AI signals at every single tick
+                                        executeAITrade(ticker, pointCount, price);
+                                        
+                                        // 3. Only throttle the NETWORK packets (every 5th point)
+                                        if (pointCount % 5 == 0) {
                                             sendPacket("PRICE_UPDATE|" + ticker + "|" + price + "|" + pointCount);
                                             sendPortfolioUpdate();
+                                            sendAIPortfolioUpdate();
                                             sendCount++;
+                                            Thread.sleep(1000); // 1 second between each 5th point
                                         }
-                                        Thread.sleep(1000); // 1 second between each 5th point
                                     }
                                 }
                                 csvReader.close();
@@ -743,6 +801,7 @@ public class ServerController {
                     // Switch to CYCLE_2 (10 second hidden phase for regeneration)
                     sendPacket("PHASE|CYCLE_2");
                     sendPortfolioUpdate();
+                    sendAIPortfolioUpdate();
                     System.out.println("Game " + gameId + ": Day " + currentDay + " ending, entering CYCLE_2");
                     
                     // Regenerate prices for newly unlocked ticker during CYCLE_2 (hidden from user)
@@ -797,6 +856,7 @@ public class ServerController {
                     System.out.println("Game " + gameId + ": Advanced to Day " + currentDay + ", DB updated");
                     
                     sendPortfolioUpdate();
+                    sendAIPortfolioUpdate();
                     
                     // Switch back to CYCLE_1 for next day
                     sendPacket("PHASE|CYCLE_1");
@@ -845,6 +905,98 @@ public class ServerController {
             } catch (Exception e) {
                 System.err.println("Error handling game completion: " + e.getMessage());
                 sendPacket("ERROR|Game completion error");
+            }
+        }
+
+        /**
+         * Load AI signals CSV for a specific ticker/day into memory
+         */
+        private void loadAISignals(String ticker, int day) {
+            List<int[]> signals = new ArrayList<>();
+            // Try day-specific file first, then fallback
+            String[] candidates = {
+                ticker + "_day" + day + "_ai_signals.csv",
+                ticker + "_ai_signals.csv"
+            };
+            for (String filename : candidates) {
+                File f = new File(filename);
+                if (!f.exists()) continue;
+                try (BufferedReader r = new BufferedReader(new FileReader(f))) {
+                    r.readLine(); // skip header
+                    String line;
+                    while ((line = r.readLine()) != null) {
+                        String[] parts = line.split(",");
+                        if (parts.length < 3) continue;
+                        try {
+                            int timeIdx = Integer.parseInt(parts[0].trim());
+                            String action = parts[2].trim().toUpperCase();
+                            signals.add(new int[]{timeIdx, "BUY".equals(action) ? 0 : 1});
+                        } catch (NumberFormatException ignored) {}
+                    }
+                    System.out.println("AI signals loaded for " + ticker + " Day " + day + ": " + signals.size() + " signals from " + filename);
+                } catch (IOException e) {
+                    System.err.println("Failed to read AI signals: " + filename + " - " + e.getMessage());
+                }
+                break; // used first found file
+            }
+            aiSignals.put(ticker, signals);
+        }
+
+        /**
+         * Execute AI trade based on loaded signals
+         * Synchronized to prevent race conditions when multiple tickers stream in parallel
+         */
+        private void executeAITrade(String ticker, int timeIdx, double price) {
+            List<int[]> signals = aiSignals.get(ticker);
+            if (signals == null) return;
+
+            for (int[] signal : signals) {
+                if (signal[0] != timeIdx) continue;
+
+                boolean isBuy = signal[1] == 0;
+                
+                // SYNCHRONIZE: Ensure atomic read-modify-write of game state
+                synchronized (tradeLock) {
+                    Map<String, Object> gameState = server.dbHandler.getGameData(gameId);
+                    double aiCash = ((Number) gameState.get("ai_cash")).doubleValue();
+                    int stockId = server.dbHandler.getStockId(ticker);
+
+                    if (isBuy) {
+                        // Difficulty-based spend percentage
+                        double[] opts;
+                        if (difficulty == 1)      opts = new double[]{0.10, 0.20, 0.30};
+                        else if (difficulty == 2) opts = new double[]{0.20, 0.30, 0.50};
+                        else                      opts = new double[]{0.30, 0.40, 0.50};
+
+                        double pct = opts[new java.util.Random().nextInt(opts.length)];
+                        int qty = (int) ((aiCash * pct) / price);
+                        if (qty <= 0) {
+                            System.out.println("[AI] BUY signal at " + timeIdx + " for " + ticker + " but insufficient cash (£" + String.format("%.2f", aiCash) + ")");
+                            return;
+                        }
+                        double cost = qty * price;
+                        int held = server.dbHandler.getAIHolding(gameId, stockId);
+                        server.dbHandler.updateAICash(gameId, aiCash - cost);
+                        server.dbHandler.updateAIHolding(gameId, stockId, held + qty);
+                        System.out.println("[AI] BUY  " + qty + " x " + ticker + " @ £" + String.format("%.3f", price)
+                            + " (" + (int)(pct*100) + "% of £" + String.format("%.2f", aiCash) + ")"
+                            + " = £" + String.format("%.2f", cost)
+                            + " | Cash: £" + String.format("%.2f", aiCash) + " -> £" + String.format("%.2f", aiCash - cost));
+                    } else {
+                        int held = server.dbHandler.getAIHolding(gameId, stockId);
+                        if (held <= 0) {
+                            System.out.println("[AI] SELL signal at " + timeIdx + " for " + ticker + " but no holdings");
+                            return;
+                        }
+                        double proceeds = held * price;
+                        server.dbHandler.updateAICash(gameId, aiCash + proceeds);
+                        server.dbHandler.updateAIHolding(gameId, stockId, 0);
+                        System.out.println("[AI] SELL " + held + " x " + ticker + " @ £" + String.format("%.3f", price)
+                            + " = £" + String.format("%.2f", proceeds)
+                            + " | Cash: £" + String.format("%.2f", aiCash) + " -> £" + String.format("%.2f", aiCash + proceeds));
+                    }
+                }
+                break; // only one signal per timeIdx
             }
         }
 

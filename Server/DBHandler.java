@@ -653,4 +653,80 @@ public class DBHandler {
         }
         return gameState;
     }
+
+    /**
+     * Get AI holding for a specific stock
+     */
+    public int getAIHolding(int gameId, int stockId) {
+        try (Connection conn = getConnection()) {
+            String query = "SELECT quantity FROM portfolios WHERE game_id = ? AND owner_type = 'ai' AND stock_id = ?";
+            try (PreparedStatement pstmt = conn.prepareStatement(query)) {
+                pstmt.setInt(1, gameId);
+                pstmt.setInt(2, stockId);
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    if (rs.next()) {
+                        return rs.getInt("quantity");
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Error fetching AI holding: " + e.getMessage());
+        }
+        return 0;
+    }
+
+    /**
+     * Update AI's cash
+     */
+    public boolean updateAICash(int gameId, double newCash) {
+        try (Connection conn = getConnection()) {
+            String query = "UPDATE games SET ai_cash = ? WHERE game_id = ?";
+            try (PreparedStatement pstmt = conn.prepareStatement(query)) {
+                pstmt.setDouble(1, newCash);
+                pstmt.setInt(2, gameId);
+                return pstmt.executeUpdate() > 0;
+            }
+        } catch (SQLException e) {
+            System.err.println("Error updating AI cash: " + e.getMessage());
+        }
+        return false;
+    }
+
+    /**
+     * Update AI's holding quantity for a specific stock
+     */
+    public boolean updateAIHolding(int gameId, int stockId, int newQuantity) {
+        try (Connection conn = getConnection()) {
+            // First check if record exists
+            String checkQuery = "SELECT id FROM portfolios WHERE game_id = ? AND owner_type = 'ai' AND stock_id = ?";
+            try (PreparedStatement checkStmt = conn.prepareStatement(checkQuery)) {
+                checkStmt.setInt(1, gameId);
+                checkStmt.setInt(2, stockId);
+                try (ResultSet rs = checkStmt.executeQuery()) {
+                    if (rs.next()) {
+                        // Update existing record
+                        String updateQuery = "UPDATE portfolios SET quantity = ? WHERE game_id = ? AND owner_type = 'ai' AND stock_id = ?";
+                        try (PreparedStatement updateStmt = conn.prepareStatement(updateQuery)) {
+                            updateStmt.setInt(1, newQuantity);
+                            updateStmt.setInt(2, gameId);
+                            updateStmt.setInt(3, stockId);
+                            return updateStmt.executeUpdate() > 0;
+                        }
+                    } else {
+                        // Insert new record
+                        String insertQuery = "INSERT INTO portfolios (game_id, owner_type, stock_id, quantity) VALUES (?, 'ai', ?, ?)";
+                        try (PreparedStatement insertStmt = conn.prepareStatement(insertQuery)) {
+                            insertStmt.setInt(1, gameId);
+                            insertStmt.setInt(2, stockId);
+                            insertStmt.setInt(3, newQuantity);
+                            return insertStmt.executeUpdate() > 0;
+                        }
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Error updating AI holding: " + e.getMessage());
+        }
+        return false;
+    }
 }

@@ -8,6 +8,7 @@
 <?import javafx.scene.control.ComboBox?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.ProgressBar?>
+<?import javafx.scene.control.Separator?>
 <?import javafx.scene.control.Spinner?>
 <?import javafx.scene.control.TableColumn?>
 <?import javafx.scene.control.TableView?>
@@ -130,7 +131,7 @@
             <Insets top="10.0" />
          </padding>
          <children>
-            <Label text="Portfolio">
+            <Label text="Your Portfolio">
                <font>
                   <Font size="16.0" />
                </font></Label>
@@ -142,11 +143,30 @@
                <font>
                   <Font size="16.0" />
                </font></Label>
-            <TableView fx:id="tableHoldings" prefWidth="200.0" VBox.vgrow="ALWAYS">
+            <TableView fx:id="tableHoldings" prefHeight="200.0" prefWidth="200.0" VBox.vgrow="NEVER">
               <columns>
                 <TableColumn fx:id="colTicker" prefWidth="75.0" style="-fx-alignment: CENTER;" text="Ticker" />
                 <TableColumn fx:id="colQty" prefWidth="75.0" style="-fx-alignment: CENTER;" text="Qty" />
                   <TableColumn fx:id="colValue" prefWidth="75.0" style="-fx-alignment: CENTER;" text="Value" />
+              </columns>
+               <columnResizePolicy>
+                  <TableView fx:constant="CONSTRAINED_RESIZE_POLICY" />
+               </columnResizePolicy>
+            </TableView>
+            <Separator />
+            <Label text="AI Portfolio">
+               <font>
+                  <Font size="16.0" />
+               </font></Label>
+            <Label fx:id="lblAICash" text="AI Cash: £0.00">
+               <font>
+                  <Font size="16.0" />
+               </font></Label>
+            <TableView fx:id="tableAIHoldings" prefHeight="150.0" prefWidth="200.0" VBox.vgrow="ALWAYS">
+              <columns>
+                <TableColumn fx:id="colAITicker" prefWidth="75.0" style="-fx-alignment: CENTER;" text="Ticker" />
+                <TableColumn fx:id="colAIQty" prefWidth="75.0" style="-fx-alignment: CENTER;" text="Qty" />
+                  <TableColumn fx:id="colAIValue" prefWidth="75.0" style="-fx-alignment: CENTER;" text="Value" />
               </columns>
                <columnResizePolicy>
                   <TableView fx:constant="CONSTRAINED_RESIZE_POLICY" />
