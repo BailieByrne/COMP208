@@ -129,11 +129,11 @@ public class DBHandler {
             }
 
             // Insert default stocks if they don't exist
-            stmt.execute("INSERT OR IGNORE INTO stocks (symbol, name) VALUES ('TULA', 'Tula Energy Corp')");
-            stmt.execute("INSERT OR IGNORE INTO stocks (symbol, name) VALUES ('PEARS', 'Pears Agriculture Ltd')");
-            stmt.execute("INSERT OR IGNORE INTO stocks (symbol, name) VALUES ('CORN', 'Corn Holdings Inc')");
-            stmt.execute("INSERT OR IGNORE INTO stocks (symbol, name) VALUES ('RICE', 'Rice Grain Industries')");
-            stmt.execute("INSERT OR IGNORE INTO stocks (symbol, name) VALUES ('GRAIN', 'Grain Technologies')")
+            stmt.execute("INSERT OR IGNORE INTO stocks (symbol, name) VALUES ('TULA', 'TTULA car companyu')");
+            stmt.execute("INSERT OR IGNORE INTO stocks (symbol, name) VALUES ('PEARS', 'Pears Phomne company')");
+            stmt.execute("INSERT OR IGNORE INTO stocks (symbol, name) VALUES ('CORN', 'Corn Farming company')");
+            stmt.execute("INSERT OR IGNORE INTO stocks (symbol, name) VALUES ('RICE', 'Rice food company')");
+            stmt.execute("INSERT OR IGNORE INTO stocks (symbol, name) VALUES ('GRAIN', 'Grain farming company')");
 
             conn.commit();
             stmt.close();
