@@ -47,10 +47,53 @@ public class Player {
 
     /**
      * canMove - checks if player can move to next position (collision detection)
-     * Currently always returns true but placeholder for future collision logic
+     * Prevents walking through walls and prevents going out of bounds
+     * Player uses a 16x16 collision box for reasonable collision detection
      */
-    public boolean canMove(int nextX, int nextY, int[][] mapGrid) {
-        return true; // no collision checks yet
+    public boolean canMove(int nextX, int nextY, int[][] mapGrid, int mapWidth, int mapHeight) {
+        // Get map dimensions from grid
+        int mapPixelWidth = mapWidth * 16;  // convert tiles to pixels
+        int mapPixelHeight = mapHeight * 16;
+        
+        // Use a smaller 16x16 collision box (one tile), positioned at player position
+        int playerWidth = 16;
+        int playerHeight = 16;
+        int minX = nextX - (playerWidth / 2);
+        int maxX = nextX + (playerWidth / 2);
+        int minY = nextY - (playerHeight / 2);
+        int maxY = nextY + (playerHeight / 2);
+        
+        // --- BOUNDARY CHECKING ---
+        // Allow movement as long as player center is within map bounds
+        if (nextX < 0 || nextX >= mapPixelWidth || nextY < 0 || nextY >= mapPixelHeight) {
+            System.out.println("DEBUG: Out of bounds - player center at (" + nextX + "," + nextY + ") map(" + mapPixelWidth + "x" + mapPixelHeight + ")");
+            return false;
+        }
+        
+        // --- COLLISION WITH TILES ---
+        // Check all tiles that the player bounding box overlaps
+        int startTileX = Math.max(0, minX / 16);
+        int startTileY = Math.max(0, minY / 16);
+        int endTileX = Math.min(mapWidth - 1, maxX / 16);
+        int endTileY = Math.min(mapHeight - 1, maxY / 16);
+        
+        // Check each tile in the player's collision area
+        // Only allow movement on tile 0 (empty/walkable) from collision layer
+        // Block on tile 1730 (walls) from collision layer
+        for (int tileY = startTileY; tileY <= endTileY; tileY++) {
+            for (int tileX = startTileX; tileX <= endTileX; tileX++) {
+                int tileID = mapGrid[tileY][tileX];
+                System.out.println("DEBUG: Checking tile[" + tileY + "][" + tileX + "] = " + tileID);
+                // Block on non-zero tiles (walls like 1730)
+                if (tileID != 0) {
+                    System.out.println("DEBUG: BLOCKED - collision tile ID " + tileID);
+                    return false; // collision detected - hit a wall
+                }
+            }
+        }
+        
+        System.out.println("DEBUG: Movement ALLOWED");
+        return true; // no collision, movement is valid
     }
 
     /**

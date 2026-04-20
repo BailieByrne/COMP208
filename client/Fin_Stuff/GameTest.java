@@ -91,6 +91,7 @@ public class GameTest extends JPanel implements ActionListener, KeyListener {
             // Parse all layers from the JSON (tile layers + object layers)
             for (JsonNode layer : root.get("layers")) {
                 String layerType = layer.get("type").asText();
+                String layerName = layer.has("name") ? layer.get("name").asText() : "";
 
                 // Handle Tile Layers (visual map tiles)
                 if (layerType.equals("tilelayer")) {
@@ -99,7 +100,8 @@ public class GameTest extends JPanel implements ActionListener, KeyListener {
                     for (int i = 0; i < data.size(); i++) {
                         int tileVal = data.get(i).asInt();
                         newLayer[i / mapWidth][i % mapWidth] = tileVal;
-                        if (tileVal != 0) {
+                        // Only use the collision layer for mapGrid collision detection
+                        if (layerName.equals("Collision_Tiles")) {
                             mapGrid[i / mapWidth][i % mapWidth] = tileVal;
                         }
                     }
@@ -272,8 +274,8 @@ public class GameTest extends JPanel implements ActionListener, KeyListener {
         if (e.getKeyCode() == KeyEvent.VK_A) nextX -= speed; // left
         if (e.getKeyCode() == KeyEvent.VK_D) nextX += speed; // right
 
-        // check if movement is valid (no collision)
-        if (player.canMove(nextX, nextY, mapGrid)) {
+        // check if movement is valid (no collision with walls or boundaries)
+        if (player.canMove(nextX, nextY, mapGrid, mapWidth, mapHeight)) {
             player.x = nextX; player.y = nextY;
         }
 
