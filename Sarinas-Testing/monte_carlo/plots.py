@@ -81,16 +81,19 @@ def creating_plots():
     #box plot
     plt.figure(figsize=(10, 6))
     data_plot = [python_times, cpp_total, sim_times, ai_times]
-    bp = plt.boxplot(data_plot, labels=['Python Total', 'C++ Total', 'MC Simulation', 'AI Predictions'],
+    bp = plt.boxplot(data_plot, tick_labels=['Python Total', 'C++ Total', 'MC Simulation', 'AI Predictions'],
                      patch_artist=True, 
                      showmeans=True, 
+                     showfliers=True,
                      boxprops=dict(facecolor='#ff9999', color='black', alpha=0.7),
                         medianprops=dict(color='black', linewidth=2),
                         whiskerprops=dict(color='black', linewidth=1.5),
                         capprops=dict(color='black', linewidth=1.5),
     )
 
-    colour_box = ['#ff9999', '#66b3ff', '#99ff99', '#ffcc99']
+   
+
+    colour_box = [ '#ffcc99',"#ff65ff",'#ff9999', '#66b3ff']
     for patch, color in zip(bp['boxes'], colour_box):
         patch.set_facecolor(color)
         patch.set_alpha(0.7)

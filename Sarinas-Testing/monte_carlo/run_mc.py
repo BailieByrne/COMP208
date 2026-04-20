@@ -7,7 +7,7 @@ from datetime import datetime
 
 exe = Path("/Users/sarinasaiyed/COMP208/Backend/program")
 outer_folder = Path("/Users/sarinasaiyed/COMP208/Sarinas-Testing/outputs")
-runs = 100
+runs = 75
 
 def run_simulation():  
     if not outer_folder.exists():
@@ -36,22 +36,7 @@ def run_simulation():
                     [str(exe), ticker,str(difficulty), str(S0), seed],
                     cwd=run_directory, 
                     check=True)
-                ###output_file = run_directory / "predicted_prices.csv"
-               # if (output_file).exists():
-              #      status = "Completed"
-              #      print(f" \n Run #{i} completed successfully")
-              #  else:
-              #      status = "No_CSV"
-              #     print(f" \n Run #{i} finished with no CSV file found")
-              # ai code start
-                csv1 = run_directory / f"{ticker}_stock_prices.csv"
-                csv2 = run_directory / f"{ticker}_predicted_prices.csv"
-
-                if csv1.exists() and csv2.exists():
-                    status = "Completed"
-                else:
-                    status = "No_CSV"
-# ai code end  
+                
 
             except subprocess.CalledProcessError as e:
                 status = f"failed: {e}"
@@ -75,7 +60,7 @@ def run_simulation():
                         line = line.strip()
                         
                         #skipping to next line if empty or doesnt have :
-                        if not line or ":" not in line:
+                        if line.strip() == "" or ":" not in line:
                             continue
                         
                         header, data = line.split(":", 1)
@@ -119,14 +104,12 @@ def run_simulation():
     print(f"Total time: {total_time:.2f}")
     print(f"Log saved to: {log_file}")
 
-
-# Ai code remove later
-def safe(v):
-    return 0.0 if v is None else v
-# end of ai code
-
+def safe(value):
+    if value is not None:   
+        return 0.0
+    return value
     
-
+ 
 if __name__ == "__main__":
     run_simulation()
         
