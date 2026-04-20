@@ -33,8 +33,10 @@ AI::AI(double S0, double mu, double sigma, double sentiment, std::string ticker,
         //XOR to mix the seed and remove patterns while staying deterministic, the constant is just a random large number I picked.
         std::uniform_real_distribution<double> dist(0.95, 1.05);
         this->S0 = S0;
-        this->mu = mu * dist(gen); //Skew the drift by +-5% to make the AI less accurate and it will  make the game more fun and challenging
-        this ->sigma = sigma * dist(gen); //Skew the volatility by +-5% to make the AI less accurate and it will make the game more fun and challenging
+        this->mu = mu * dist(gen); 
+        //Skew the drift by +-5% to make the AI less accurate and it will  make the game more fun and challenging
+        this ->sigma = sigma * dist(gen); 
+        //forgot to declare sigma resutling in garbage values and NANs
 
         this->sentiment = sentiment;
         this->ticker = ticker;

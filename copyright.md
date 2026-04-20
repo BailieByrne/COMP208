@@ -36,7 +36,7 @@ SLF4J (Simple Logging Facade for Java)
 Link {https://www.slf4j.org/}
 Author {QOS.ch}
 Version {2.0.13}
-Description {Logging framework for Java applications}
+Decsription {Logging framework for Java applications)
 
 Jackson (JSON processing library)
 Link {https://github.com/FasterXML/jackson}
