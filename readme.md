@@ -1,6 +1,6 @@
 # COMP208: GBM Stock Price Simulator with Brownian Bridge AI
 
-> A C++ Monte Carlo stock price simulator using Geometric Brownian Motion in log-space with Itô correction, Brownian Bridge path conditioning, and a multithreaded AI prediction engine, built as part of a second-year university gorup project and risk benchmarking tool.
+> A C++ Monte Carlo stock price simulator using Geometric Brownian Motion in log-space with Itô correction, Brownian Bridge path conditioning, and a multithreaded AI prediction engine, built as part of a second-year university group project and risk benchmarking tool.
 
 ---
 
