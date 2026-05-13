@@ -6,3 +6,4 @@
 **/.gradle
 **/*.db
 **/Logs
+**/DB

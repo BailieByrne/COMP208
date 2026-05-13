@@ -7,7 +7,7 @@ import javax.swing.Timer;
 //Neccesary imports for embedding swing into JavaFX and contolling threads
 
 
-//Cycle 2 Game Controller - handles the tiled RPG game phase embedded in JavaFX
+//Cycle 2 Game Controller handles the tiled RPG game phase embedded in JavaFX
 public class Cycle2GameController {
     @FXML private BorderPane rootPane;
     @FXML private SwingNode gameContainer;
@@ -19,7 +19,7 @@ public class Cycle2GameController {
 
     /**
      * Initialize the Cycle 2 Game Controller, this sets up the swing game panel and embeds it into the swingnode
-     * Also starts the 60 second timer for auto-close and return to cycle 1
+     * Also starts the 60 second timer for auto close and return to cycle 1
      * This is called automatically when the FXML loads
      */
     @FXML
@@ -46,23 +46,18 @@ public class Cycle2GameController {
             }
         });
         
-        // Set up 60-second timeout - after this time we auto-close the game and return to cycle 1
-        // Player can also finish the game manually (get coffee) and it will close early
+        // Set up 60 second timeout fter this time we close the game and return to cycle 1
         timeoutTimer = new Timer(CYCLE_2_DURATION_MS, e -> endCycle2());
         timeoutTimer.setRepeats(false);
         timeoutTimer.start();
-        
-        System.out.println("Cycle 2 game started - 60 sec timer running");
     }
 
     /**
-     * Called when 60 seconds elapse OR game is manually closed
+     * Called when 60 seconds elapse or game is manually closed
      * Cleans up the swing game resources and transitions back to Cycle 1 trading UI
      * This ensures the player returns to continue trading on next day
      */
-    private void endCycle2() {
-        System.out.println("Ending Cycle 2 - transitioning back to Cycle 1 trading");
-        
+    private void endCycle2() {      
         // Stop the game loop and clean up swing components.
         if (gamePanel != null) {
             SwingUtilities.invokeLater(() -> {

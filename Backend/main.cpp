@@ -82,7 +82,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    //Take Seed If provided (DEBUG Mostly)
+    //Take Seed If provided
     if (argc >= 5) {
         userSeed = argv[4];
     }
@@ -100,8 +100,8 @@ int main(int argc, char *argv[]) {
      * TODO:
      * - Add command line args for the params and seed (piecewise)
      */
-    double mu = 0.05;       // Drift
-    double sigma = 0.4;     // Volatility
+    double mu = 0.05; // Drift
+    double sigma = 0.4; // Volatility
     double sentiment = 1.0; // Market sentiment
 
 

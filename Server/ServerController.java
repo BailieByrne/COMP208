@@ -7,16 +7,11 @@ import java.util.concurrent.*;
  * ServerController
  *
  * Listens on PORT for client connections and spawns a clientHandler thread per connection via the thread pool.
- *
- * Responsibilities:
- *   - Accepts the  incoming sockets
- *   - Register / unregister authenticated clients by userId (from DB Managr)
- *   - Provide the clients to be exposed to the whole server.
  */
 public class ServerController {
     private static final int PORT = 5000;
 
-    //Singleton is a private constructor and public getter, its static for 1 instance 
+
     private static ServerController instance;
     private ServerController() {
         //Creates the DB, and threads
@@ -24,7 +19,7 @@ public class ServerController {
         threadPool = Executors.newCachedThreadPool();
     }
 
-    // Singleton getter
+
     public static synchronized ServerController getInstance() {
         if (instance == null) {
             instance = new ServerController();
@@ -42,8 +37,7 @@ public class ServerController {
     /**
      * Starts the server.
      *
-     * On startup, removes any stale CSV files left over from a previous run so
-     * that price generation always starts clean. Then enters the accept loop.
+     * On startup, removes any stale CSV files left over from a previous run so price geneeration always starts clean. Then enters the accept loop.
      */
     public void start() {
         deleteStaleCSVFiles();
@@ -63,8 +57,7 @@ public class ServerController {
     }
 
     /**
-     * Recursively deletes every .csv file under the working directory.
-     * Called once at startup to clear price files from any previous run.
+     * Delets all CSV, this is a limitation we plan to pipe directly to stdin of JAVA
      */
     private void deleteStaleCSVFiles() {
         Deque<File> stack = new ArrayDeque<>();
@@ -89,11 +82,14 @@ public class ServerController {
         }
     }
 
+
     // -------------------------------------------------------------------------
     // Client registry
     // -------------------------------------------------------------------------
 
-    /** Registers an authenticated client so other parts of the server can reach it. */
+    /**
+     * 
+     *  Registers an authenticated client so other parts of the server can reach it. */
     public void registerClient(int userId, ClientHandler handler) {
         connectedClients.put(userId, handler);
         System.out.println("Client registered: userId=" + userId);
@@ -105,7 +101,8 @@ public class ServerController {
         System.out.println("Client unregistered: userId=" + userId);
     }
 
-    /** Returns the live handler for a userId, or null if not connected. */
+    /**
+     *  Returns the live handler for a userId, or null if not connected. */
     public ClientHandler getClient(int userId) {
         return connectedClients.get(userId);
     }
@@ -118,55 +115,30 @@ public class ServerController {
         ServerController.getInstance().start();
     }
 
+    // ======================================================
+    // ClientHandler
     // =========================================================================
-    // ClientHandler — inner class
-    // =========================================================================
-
-    /**
-     * ClientHandler
-     *
-     * Runs on its own thread (from the server thread pool). Owns the lifecycle
-     * of one client connection:
-     *
-     *   1. Reads packets from the socket (listenForPackets)
-     *   2. Dispatches to typed handlers (handleLogin, handleBuy, …)
-     *   3. Streams simulated stock prices across 5 game days (streamGamePrices)
-     *   4. Shuts down cleanly when the client disconnects (disconnect)
-     *
-     * Thread shutdown strategy
-     * ─────────────────────────
-     * A single volatile boolean `running` acts as the kill-switch shared
-     * across all child threads. Setting it to false causes every loop to exit
-     * at its next iteration check. The one blocking call (Thread.sleep during
-     * CYCLE_2) is also interrupted explicitly via streamingThread.interrupt()
-     * so that disconnect takes effect immediately rather than after 60 seconds.
-     */
     static class ClientHandler implements Runnable {
 
-        // -----------------------------------------------------------------------
-        // Constants
-        // -----------------------------------------------------------------------
-
-        private static final String[] TICKERS    = {"TULA", "PEARS", "CORN", "RICE", "GRAIN"};
-        private static final int      TOTAL_DAYS  = 5;
-        private static final int      POINTS_PER_DAY = 102;
-        private static final long     CYCLE2_MS   = 60_000;
+        //ADD additional TIckers here
+        private static final String[] TICKERS = {"TULA", "PEARS", "CORN", "RICE", "GRAIN"};
+        private static final int TOTAL_DAYS  = 5;
+        private static final int POINTS_PER_DAY = 102;
+        private static final long CYCLE2_MS   = 60_000;
 
         // -----------------------------------------------------------------------
         // Connection state
         // -----------------------------------------------------------------------
 
-        private final Socket         socket;
+        private final Socket socket;
         private final ServerController server;
-        private PrintWriter          out;
-        private BufferedReader       in;
+        private PrintWriter out;
+        private BufferedReader in;
 
-        // -----------------------------------------------------------------------
-        // Session state
-        // -----------------------------------------------------------------------
 
-        private int userId     = -1;
-        private int gameId     = -1;
+        //State
+        private int userId = -1;
+        private int gameId = -1;
         private int currentDay = 1;
         private int difficulty = 1;
 
@@ -178,7 +150,6 @@ public class ServerController {
 
         // -----------------------------------------------------------------------
         // Price tracking
-        // Maps ticker → most-recently-streamed price.
         // Used when sending portfolio updates so the client always sees the
         // current market price for each holding.
         // -----------------------------------------------------------------------
@@ -187,16 +158,16 @@ public class ServerController {
 
         // -----------------------------------------------------------------------
         // AI signals
-        // Maps ticker → list of {timeIndex, actionType} pairs loaded from CSV.
-        // actionType: 0 = BUY, 1 = SELL
+        // This is used to store the pairs, originally was kelly Ciretion but we pivoted to random allocation
         // -----------------------------------------------------------------------
 
         private final Map<String, List<int[]>> aiSignals = new HashMap<>();
 
         /**
          * Synchronises AI trade execution across parallel ticker threads.
-         * Each ticker streams on its own thread; without this lock, two tickers
-         * could read/write AI cash simultaneously.
+         * Each ticker streams on its own thread; without this lock, two tickers could read/write AI cash simultaneously.
+         * https://medium.com/@premchandu.in/locking-mechanism-in-java-3eaf0d28066c
+         * //We had to look this up as the bug was discovered later on.
          */
         private final Object tradeLock = new Object();
 
@@ -213,12 +184,6 @@ public class ServerController {
          */
         private volatile boolean running = true;
 
-        /**
-         * Reference to the outer streaming thread.
-         *
-         * Kept so disconnect() can call interrupt() on it, waking any
-         * Thread.sleep() call immediately rather than waiting for it to expire.
-         */
         private Thread streamingThread;
 
         // -----------------------------------------------------------------------
@@ -252,8 +217,7 @@ public class ServerController {
         // -----------------------------------------------------------------------
 
         /**
-         * Blocks reading lines from the socket until the connection closes or
-         * an IOException is thrown.
+         * Blocks reading lines from the socket until the connection closes or an IOException is thrown.
          */
         private void listenForPackets() {
             try {
@@ -269,10 +233,6 @@ public class ServerController {
         /**
          * Parses and dispatches a raw packet string.
          *
-         * Wire format:  PAYLOAD|ARGS…|CHECKSUM
-         *
-         * The checksum is the last pipe-delimited token. Everything before the
-         * last pipe is the payload. The checksum is a simple sum-of-chars mod 256.
          */
         private void handlePacket(String packet) {
             if (packet == null || packet.isEmpty()) return;
@@ -340,7 +300,6 @@ public class ServerController {
 
         /**
          * Sends a packet to the client, appending a checksum.
-         * Wire format: PAYLOAD|CHECKSUM
          */
         private void sendPacket(String payload) {
             if (out != null) {
@@ -349,7 +308,7 @@ public class ServerController {
         }
 
         /**
-         * Simple checksum: sum of char values, mod 256.
+         * Simple checksum sum of char values, mod 256.
          * Keeps values within one byte; prevents integer overflow on long strings.
          */
         private int calculateChecksum(String payload) {
@@ -362,12 +321,7 @@ public class ServerController {
         // Auth handlers
         // -----------------------------------------------------------------------
 
-        /**
-         * LOGIN|username|password
-         *
-         * Validates credentials via DBHandler. On success, registers the client
-         * and sends back any active games so the client can offer a resume prompt.
-         */
+
         private void handleLogin(String[] parts) {
             if (parts.length < 3) { sendPacket("LOGIN_FAILED|Invalid packet format"); return; }
 
@@ -398,11 +352,7 @@ public class ServerController {
             }
         }
 
-        /**
-         * SIGNUP|username|password
-         *
-         * Creates a new user account. Fails if the username is already taken.
-         */
+
         private void handleSignup(String[] parts) {
             if (parts.length < 3) { sendPacket("SIGNUP_FAILED|Invalid packet format"); return; }
 
@@ -424,12 +374,6 @@ public class ServerController {
         // Game lifecycle handlers
         // -----------------------------------------------------------------------
 
-        /**
-         * START_GAME|difficulty
-         *
-         * Creates a new game row in the DB, cancels any other active games for
-         * this user, then begins price streaming from Day 1.
-         */
         private void handleStartGame(String[] parts) {
             if (userId == -1) { sendPacket("ERROR|Not authenticated"); return; }
             if (parts.length < 2) { sendPacket("ERROR|Invalid packet format"); return; }
@@ -461,12 +405,7 @@ public class ServerController {
             }
         }
 
-        /**
-         * RESUME_GAME
-         *
-         * Loads the first active game for this user and resumes price streaming
-         * from the saved day.
-         */
+        
         private void handleResumeGame(String[] parts) {
             if (userId == -1) { sendPacket("ERROR|Not authenticated"); return; }
 
@@ -490,12 +429,6 @@ public class ServerController {
         // Trade handlers
         // -----------------------------------------------------------------------
 
-        /**
-         * BUY|ticker|quantity|price
-         *
-         * Validates the player has sufficient cash, deducts it, adds shares to
-         * their holdings, and logs the trade.
-         */
         private void handleBuy(String[] parts) {
             if (gameId == -1)     { sendPacket("ERROR|No active game");           return; }
             if (parts.length < 4) { sendPacket("ERROR|Invalid BUY packet format"); return; }
@@ -510,24 +443,19 @@ public class ServerController {
                 double              playerCash = ((Number) state.get("player_cash")).doubleValue();
 
                 if (playerCash < totalCost) {
-                    sendPacket("ERROR|Insufficient cash: need £"
-                        + String.format("%.2f", totalCost)
-                        + " but have £" + String.format("%.2f", playerCash));
+                    sendPacket("ERROR|Insufficient cash: need £" + String.format("%.2f", totalCost) + " but have £" + String.format("%.2f", playerCash));
                     sendPortfolioUpdate();
                     sendAIPortfolioUpdate();
                     return;
                 }
 
-                int stockId        = server.dbHandler.getStockId(ticker);
+                int stockId = server.dbHandler.getStockId(ticker);
                 int currentHolding = server.dbHandler.getPlayerHolding(gameId, stockId);
-                double newCash     = playerCash - totalCost;
+                double newCash = playerCash - totalCost;
 
                 server.dbHandler.updatePlayerCash(gameId, newCash);
                 server.dbHandler.updatePlayerHolding(gameId, stockId, currentHolding + quantity);
                 server.dbHandler.logTradeAction(userId, gameId, currentDay, "BUY", stockId, quantity, price);
-
-                System.out.printf("Game %d: BUY %d x %s @ £%.2f = £%.2f | Cash: £%.2f -> £%.2f%n",
-                    gameId, quantity, ticker, price, totalCost, playerCash, newCash);
 
                 sendPortfolioUpdate();
                 sendAIPortfolioUpdate();
@@ -538,43 +466,41 @@ public class ServerController {
             }
         }
 
-        /**
-         * SELL|ticker|quantity|price
-         *
-         * Validates the player holds enough shares, removes them, adds proceeds
-         * to cash, and logs the trade.
-         */
+
+
         private void handleSell(String[] parts) {
-            if (gameId == -1)     { sendPacket("ERROR|No active game");            return; }
-            if (parts.length < 4) { sendPacket("ERROR|Invalid SELL packet format"); return; }
+            if (gameId == -1){ 
+                    sendPacket("ERROR|No active game");
+                    return;
+                }
+            if (parts.length < 4){
+                sendPacket("ERROR|Invalid SELL packet format");
+                return;
+            }
 
             try {
-                String ticker   = parts[1];
-                int    quantity = Integer.parseInt(parts[2]);
-                double price    = Double.parseDouble(parts[3]);
+                String ticker = parts[1];
+                int quantity = Integer.parseInt(parts[2]);
+                double price = Double.parseDouble(parts[3]);
                 double proceeds = quantity * price;
 
                 int stockId        = server.dbHandler.getStockId(ticker);
                 int currentHolding = server.dbHandler.getPlayerHolding(gameId, stockId);
 
                 if (currentHolding < quantity) {
-                    sendPacket("ERROR|Insufficient holdings: have "
-                        + currentHolding + " but trying to sell " + quantity);
+                    sendPacket("ERROR|Insufficient holdings: have " + currentHolding + " but trying to sell " + quantity);
                     sendPortfolioUpdate();
                     sendAIPortfolioUpdate();
                     return;
                 }
 
-                Map<String, Object> state      = server.dbHandler.getGameData(gameId);
-                double              playerCash = ((Number) state.get("player_cash")).doubleValue();
-                double              newCash    = playerCash + proceeds;
+                Map<String, Object> state = server.dbHandler.getGameData(gameId);
+                double playerCash = ((Number) state.get("player_cash")).doubleValue();
+                double newCash = playerCash + proceeds;
 
                 server.dbHandler.updatePlayerCash(gameId, newCash);
                 server.dbHandler.updatePlayerHolding(gameId, stockId, currentHolding - quantity);
                 server.dbHandler.logTradeAction(userId, gameId, currentDay, "SELL", stockId, quantity, price);
-
-                System.out.printf("Game %d: SELL %d x %s @ £%.2f = £%.2f | Cash: £%.2f -> £%.2f%n",
-                    gameId, quantity, ticker, price, proceeds, playerCash, newCash);
 
                 sendPortfolioUpdate();
                 sendAIPortfolioUpdate();
@@ -585,34 +511,35 @@ public class ServerController {
             }
         }
 
-        /**
-         * SELL_ALL|ticker|price
-         *
-         * Sells the player's entire holding of a ticker in one operation.
-         */
         private void handleSellAll(String[] parts) {
-            if (gameId == -1)     { sendPacket("ERROR|No active game");               return; }
-            if (parts.length < 3) { sendPacket("ERROR|Invalid SELL_ALL packet format"); return; }
+            if (gameId == -1){
+                sendPacket("ERROR|No active game");
+                return;
+            }
+            if (parts.length < 3) {
+                sendPacket("ERROR|Invalid SELL_ALL packet format");
+                return;
+            }
 
             try {
                 String ticker  = parts[1];
-                double price   = Double.parseDouble(parts[2]);
-                int    stockId = server.dbHandler.getStockId(ticker);
-                int    held    = server.dbHandler.getPlayerHolding(gameId, stockId);
+                double price = Double.parseDouble(parts[2]);
+                int stockId = server.dbHandler.getStockId(ticker);
+                int held = server.dbHandler.getPlayerHolding(gameId, stockId);
 
-                if (held <= 0) { sendPacket("ERROR|No holdings to sell"); return; }
+                if (held <= 0) {
+                    sendPacket("ERROR|No holdings to sell");
+                    return;
+                }
 
                 double proceeds  = held * price;
-                Map<String, Object> state     = server.dbHandler.getGameData(gameId);
+                Map<String, Object> state = server.dbHandler.getGameData(gameId);
                 double playerCash = ((Number) state.get("player_cash")).doubleValue();
-                double newCash    = playerCash + proceeds;
+                double newCash = playerCash + proceeds;
 
                 server.dbHandler.updatePlayerCash(gameId, newCash);
                 server.dbHandler.updatePlayerHolding(gameId, stockId, 0);
                 server.dbHandler.logTradeAction(userId, gameId, currentDay, "SELL_ALL", stockId, held, price);
-
-                System.out.printf("Game %d: SELL_ALL %d x %s @ £%.3f = £%.2f | Cash: £%.2f -> £%.2f%n",
-                    gameId, held, ticker, price, proceeds, playerCash, newCash);
 
                 sendPortfolioUpdate();
                 sendAIPortfolioUpdate();
@@ -623,8 +550,7 @@ public class ServerController {
         }
 
         /**
-         * POWERUP|coffee|action
-         * Actions: acquire (Cycle 2 NPC gives coffee) or activate (Cycle 1 use coffee)
+         * Handless the POWERUPS, acts a blueprint right now for futute powerups.
          */
         private void handlePowerup(String[] parts) {
             if (gameId == -1)     { sendPacket("ERROR|No active game"); return; }
@@ -668,14 +594,6 @@ public class ServerController {
         // -----------------------------------------------------------------------
         // Portfolio update helpers
         // -----------------------------------------------------------------------
-
-        /**
-         * Sends PORTFOLIO_UPDATE to the client.
-         * Format: PORTFOLIO_UPDATE|cash|TICKER:qty:price|…
-         *
-         * Only includes tickers that have been unlocked up to currentDay.
-         * Uses lastPricePerTicker so the client always sees the latest market price.
-         */
         private void sendPortfolioUpdate() {
             try {
                 Map<String, Object> state      = server.dbHandler.getGameData(gameId);
@@ -700,10 +618,6 @@ public class ServerController {
             }
         }
 
-        /**
-         * Sends AI_PORTFOLIO_UPDATE to the client.
-         * Format: AI_PORTFOLIO_UPDATE|cash|TICKER:qty:price|…
-         */
         private void sendAIPortfolioUpdate() {
             try {
                 Map<String, Object>  state      = server.dbHandler.getGameData(gameId);
@@ -739,10 +653,9 @@ public class ServerController {
          * Builds the C++ price-generation executable if it does not already exist.
          *
          * Runs cmake configure then cmake build and blocks until both complete.
-         * Synchronized so concurrent handlers don't race to build simultaneously.
          *
-         * TODO: The exe path is Windows-only. Replace with a platform-agnostic
-         *       path (or a shell script wrapper) for Mac/Linux support.
+         * TODO: The exe path is Windows-only. Replace with a better solution like a (or a shell script wrapper) for Mac/Linux support.
+         * //I tried gradlew but mac throws to mnay sudo requirements and refused to work.
          */
         private synchronized void buildCppBackend() throws Exception {
             File exeFile = new File("Backend/build/bin/Release/stock_sim.exe");
@@ -782,22 +695,6 @@ public class ServerController {
         // Price streaming
         // -----------------------------------------------------------------------
 
-        /**
-         * Main game loop — streams prices for all unlocked tickers across 5 days.
-         *
-         * Day N unlocks TICKERS[N-1], so:
-         *   Day 1 → TULA
-         *   Day 2 → TULA + PEARS
-         *   …
-         *   Day 5 → all five tickers
-         *
-         * Each day has two phases:
-         *   CYCLE_1 — 102 price points streamed in parallel across unlocked tickers
-         *   CYCLE_2 — 60-second window for the mini-game; next day's prices generated
-         *
-         * Shutdown: every loop checks `running`. The CYCLE_2 sleep also handles
-         * InterruptedException so disconnect() takes effect in under a second.
-         */
         private void streamGamePrices(int gameId, String firstTicker) {
             try {
                 while (currentDay <= TOTAL_DAYS && running) {
@@ -817,7 +714,6 @@ public class ServerController {
                         pregenerateNextDay(currentDay);
                     }
 
-                    // CYCLE_2 — 60-second pause. InterruptedException exits immediately on disconnect.
                     try {
                         Thread.sleep(CYCLE2_MS);
                     } catch (InterruptedException e) {
@@ -846,10 +742,7 @@ public class ServerController {
             }
         }
 
-        /**
-         * Generates CSV price files for every ticker unlocked on the given day.
-         * Skips tickers whose CSV already exists (e.g. when resuming a game).
-         */
+
         private void generatePricesForDay(int day) throws Exception {
             for (int i = 0; i < day && i < TICKERS.length; i++) {
                 String ticker  = TICKERS[i];
@@ -860,29 +753,22 @@ public class ServerController {
                 int    stockId   = server.dbHandler.getStockId(ticker);
                 server.dbHandler.saveDaySeed(gameId, day, stockId, seed);
 
-                // Starting price is the closing price from the previous day,
-                // or 500.0 on Day 1.
-                String startPrice = lastPricePerTicker.containsKey(ticker)
-                    ? lastPricePerTicker.get(ticker).toString()
-                    : "500.0";
+                String startPrice = lastPricePerTicker.containsKey(ticker) ? lastPricePerTicker.get(ticker).toString() : "500.0";
 
                 generateCSV(ticker, startPrice, seed, day);
             }
         }
 
-        /**
-         * Generates prices for the next day's newly-unlocked ticker in the
-         * background so it is ready when CYCLE_2 ends. Runs synchronously
-         * (join()) so it completes before CYCLE_2 sleep begins.
-         */
         private void pregenerateNextDay(int currentDay) throws Exception {
             String nextTicker = TICKERS[currentDay]; // index = currentDay because 0-based
-            String seed       = UUID.randomUUID().toString();
-            int    stockId    = server.dbHandler.getStockId(nextTicker);
+            String seed = UUID.randomUUID().toString();
+            int stockId = server.dbHandler.getStockId(nextTicker);
             server.dbHandler.saveDaySeed(gameId, currentDay + 1, stockId, seed);
 
             Thread t = new Thread(() -> {
-                try { generateCSV(nextTicker, "500.0", seed, currentDay + 1); }
+                try { 
+                    generateCSV(nextTicker, "500.0", seed, currentDay + 1); 
+                }
                 catch (Exception e) { System.err.println("Pregenerate failed: " + e.getMessage()); }
             });
             t.start();
@@ -890,9 +776,7 @@ public class ServerController {
         }
 
         /**
-         * Calls the C++ executable to write a price CSV, then renames it from
-         * the default output name (TICKER_stock_prices.csv) to the day-qualified
-         * name (TICKER_dayN_stock_prices.csv).
+         * Calls the C++ executable to write a price CSV
          */
         private void generateCSV(String ticker, String startPrice, String seed, int day) throws Exception {
             buildCppBackend();
@@ -923,8 +807,7 @@ public class ServerController {
         }
 
         /**
-         * Streams all unlocked tickers for a day in parallel, waiting for all
-         * threads to finish before returning.
+         * Streams all unlocked tickers for a day in parallel, waiting for all threads to finish before returning.
          */
         private void streamTickersInParallel(int day) throws InterruptedException {
             List<Thread> threads = new ArrayList<>();
@@ -944,24 +827,20 @@ public class ServerController {
         /**
          * Reads a ticker's CSV and sends price updates to the client.
          *
-         * Reads every tick internally (for AI signal evaluation and price
-         * tracking) but only sends a network packet every 5th tick to avoid
-         * flooding the client.
+         * When coffee powerup is active sends every tick instead for 10 seconds instead fo the normal 5th point per second
          *
-         * When coffee powerup is active, sends every tick instead for 10 seconds.
-         *
-         * Exits early if `running` becomes false (client disconnected).
+         * Exits early if running becomes false (
          */
         private void streamTicker(String ticker, int day) {
             try {
                 Thread.sleep(1000); // brief wait for CSV to be fully written
 
                 String csvFile = csvPath(ticker, day);
-                int    pointCount = 0;
-                int    sentCount  = 0;
+                int pointCount = 0;
+                int sentCount  = 0;
 
                 try (BufferedReader reader = new BufferedReader(new FileReader(csvFile))) {
-                    reader.readLine(); // skip header row
+                    reader.readLine();
 
                     String line;
                     while ((line = reader.readLine()) != null
@@ -970,7 +849,9 @@ public class ServerController {
 
                         pointCount++;
                         String[] cols = line.split(",");
-                        if (cols.length < 3) continue;
+                        if (cols.length < 3){
+                            continue;
+                        }
 
                         double price = Double.parseDouble(cols[2]);
                         lastPricePerTicker.put(ticker, price);
@@ -984,7 +865,7 @@ public class ServerController {
                             coffeeActive = false;
                         }
 
-                        // Determine granularity: every tick if coffee active, every 5th tick otherwise
+                        //every tick if coffee active, every 5th tick otherwise
                         boolean shouldSend = powerupActive ? true : (pointCount % 5 == 0);
                         
                         if (shouldSend) {
@@ -995,6 +876,7 @@ public class ServerController {
                             
                             // Sleep duration depends on powerup
                             long sleepMs = powerupActive ? 200 : 1000;  // 0.2s with coffee, 1s normally
+                            // Sleepign in the thread is okay as it wont block the rest of the application.
                             Thread.sleep(sleepMs);
                         }
                     }
@@ -1014,28 +896,26 @@ public class ServerController {
         // -----------------------------------------------------------------------
 
         /**
-         * Determines the winner by comparing final cash balances, sends GAME_OVER,
-         * and removes the game from the active-games table.
+         * Determines the winner by comparing final cash balances, sends GAME_OVER and removes the game from the active-games table.
          *
-         * Note: net worth currently uses cash only. Holdings are not yet liquidated
-         * for the final tally — a future improvement would sum position values.
+         * @Note: only cheks cash needing the  player to liquidate first,
+         * Also a finalised end game screen ahsnt been implemented, yet is is printed to console
          */
         private void handleGameCompletion(int gameId) {
             try {
                 Map<String, Object> state = server.dbHandler.getGameFinalState(gameId);
 
-                double playerNetWorth = state != null
-                    ? ((Number) state.get("player_cash")).doubleValue() : 10_000.0;
-                double aiNetWorth = state != null
-                    ? ((Number) state.get("ai_cash")).doubleValue() : 10_000.0;
+                double playerNetWorth = state != null ? ((Number) state.get("player_cash")).doubleValue() : 10_000.0;
+                double aiNetWorth = state != null ? ((Number) state.get("ai_cash")).doubleValue() : 10_000.0;
 
                 String result;
-                if      (playerNetWorth > aiNetWorth) result = "WIN";
-                else if (aiNetWorth > playerNetWorth) result = "LOSS";
-                else                                  result = "DRAW";
-
-                System.out.printf("Game %d: %s (player £%.2f vs AI £%.2f)%n",
-                    gameId, result, playerNetWorth, aiNetWorth);
+                if (playerNetWorth > aiNetWorth) {
+                    result = "WIN";
+                } else if (aiNetWorth > playerNetWorth) {
+                    result = "LOSS";
+                } else {
+                    result = "DRAW";
+                }
 
                 sendPacket("GAME_OVER|" + result + "|" + playerNetWorth + "|" + aiNetWorth);
                 server.dbHandler.deleteActiveGame(gameId);
@@ -1053,14 +933,10 @@ public class ServerController {
         /**
          * Loads AI trade signals from CSV into memory for a specific ticker/day.
          *
-         * Looks for TICKER_dayN_ai_signals.csv first, then TICKER_ai_signals.csv
-         * as a fallback. Signal format: timeIndex, _, action (BUY/SELL)
          */
         private void loadAISignals(String ticker, int day) {
             List<int[]> signals   = new ArrayList<>();
-            String[]    candidates = {
-                ticker + "_day" + day + "_ai_signals.csv",
-                ticker + "_ai_signals.csv"
+            String[]    candidates = {ticker + "_day" + day + "_ai_signals.csv", ticker + "_ai_signals.csv"
             };
 
             for (String filename : candidates) {
@@ -1084,7 +960,7 @@ public class ServerController {
                 } catch (IOException e) {
                     System.err.println("Failed to read AI signals: " + filename);
                 }
-                break; // use first matching file
+                break;
             }
 
             aiSignals.put(ticker, signals);
@@ -1093,11 +969,12 @@ public class ServerController {
         /**
          * Executes an AI trade if a signal exists for the given tick index.
          *
-         * Synchronized on tradeLock because multiple ticker threads call this
-         * concurrently and all read/write the shared AI cash balance.
-         *
-         * BUY: spends a random percentage of available cash (percentage range
-         *      scales with difficulty). SELL: liquidates the entire position.
+         * 
+         * 
+         * BUY:
+         * This is where i tried to add KElly criterion but it was too unstable
+         * 
+         * spends a random percentage of available cash uses difficulty for bounds, higher difficulty can bet more agggressively.
          */
         private void executeAITrade(String ticker, int timeIdx, double price) {
             List<int[]> signals = aiSignals.get(ticker);
@@ -1110,13 +987,13 @@ public class ServerController {
 
                 synchronized (tradeLock) {
                     Map<String, Object> state   = server.dbHandler.getGameData(gameId);
-                    double              aiCash  = ((Number) state.get("ai_cash")).doubleValue();
-                    int                 stockId = server.dbHandler.getStockId(ticker);
+                    double aiCash  = ((Number) state.get("ai_cash")).doubleValue();
+                    int stockId = server.dbHandler.getStockId(ticker);
 
                     if (isBuy) {
                         double[] spendOptions = spendPercentages();
-                        double   pct  = spendOptions[new Random().nextInt(spendOptions.length)];
-                        int      qty  = (int) ((aiCash * pct) / price);
+                        double pct = spendOptions[new Random().nextInt(spendOptions.length)];
+                        int qty = (int) ((aiCash * pct) / price);
 
                         if (qty <= 0) {
                             System.out.printf("[AI] BUY skipped — insufficient cash (£%.2f)%n", aiCash);
@@ -1124,36 +1001,27 @@ public class ServerController {
                         }
 
                         double cost = qty * price;
-                        int    held = server.dbHandler.getAIHolding(gameId, stockId);
+                        int held = server.dbHandler.getAIHolding(gameId, stockId);
                         server.dbHandler.updateAICash(gameId, aiCash - cost);
                         server.dbHandler.updateAIHolding(gameId, stockId, held + qty);
-
-                        System.out.printf("[AI] BUY  %d x %s @ £%.3f (%d%% of £%.2f) = £%.2f | Cash: £%.2f -> £%.2f%n",
-                            qty, ticker, price, (int)(pct*100), aiCash, cost, aiCash, aiCash - cost);
-
                     } else {
-                        int    held     = server.dbHandler.getAIHolding(gameId, stockId);
+                        int held = server.dbHandler.getAIHolding(gameId, stockId);
                         if (held <= 0) {
-                            System.out.println("[AI] SELL skipped — no holdings for " + ticker);
                             return;
                         }
                         double proceeds = held * price;
                         server.dbHandler.updateAICash(gameId, aiCash + proceeds);
                         server.dbHandler.updateAIHolding(gameId, stockId, 0);
-
-                        System.out.printf("[AI] SELL %d x %s @ £%.3f = £%.2f | Cash: £%.2f -> £%.2f%n",
-                            held, ticker, price, proceeds, aiCash, aiCash + proceeds);
                     }
                 }
-                break; // only one signal fires per tick
+                break;
             }
         }
 
-        /**
-         * Returns the set of spend-percentage options for AI BUY orders,
-         * scaled to difficulty (higher difficulty = more aggressive spend).
-         */
+
         private double[] spendPercentages() {
+            // This is the substitute for kelly criterion 
+
             if (difficulty == 1) return new double[]{0.10, 0.20, 0.30};
             if (difficulty == 2) return new double[]{0.20, 0.30, 0.50};
             return new double[]{0.30, 0.40, 0.50};
@@ -1163,32 +1031,23 @@ public class ServerController {
         // Disconnect and shutdown
         // -----------------------------------------------------------------------
 
-        /**
-         * Called from the finally block in run() whenever the client drops.
-         *
-         * Shutdown sequence:
-         *   1. Set running = false  — signals all loops to exit at next check
-         *   2. Interrupt streamingThread — wakes any Thread.sleep() immediately
-         *   3. Persist game state to DB so the player can resume later
-         *   4. Close the socket
-         */
+
         private void disconnect() {
-            // 1 + 2: stop all child threads
+            //stop all child threads
             running = false;
             if (streamingThread != null) {
                 streamingThread.interrupt();
             }
 
-            // 3: persist progress
+            //save
             try {
                 if (gameId != -1) {
                     if (currentDay >= 1 && currentDay < TOTAL_DAYS) {
-                        // Disconnected mid-game — advance the stored day so a resume
-                        // starts from the correct point.
+                        // Disconnected mid-game advance the stored day so a resume
                         server.dbHandler.updateGameDay(gameId, currentDay + 1);
                         System.out.println("Game " + gameId + " saved at Day " + (currentDay + 1));
                     } else if (currentDay == TOTAL_DAYS) {
-                        // Game was complete — remove from active games.
+                        // Game was completeed
                         server.dbHandler.deleteActiveGame(gameId);
                     }
                 }
@@ -1196,7 +1055,7 @@ public class ServerController {
                 System.err.println("Error persisting game state on disconnect: " + e.getMessage());
             }
 
-            // 4: close socket and deregister
+            //close socket and deregister
             try {
                 if (userId != -1) server.unregisterClient(userId);
                 if (socket != null) socket.close();

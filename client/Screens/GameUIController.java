@@ -211,7 +211,7 @@ public class GameUIController {
 
     /**
      * Update price data from server - called when PRICE_UPDATE packet arrives
-     * Formats: ticker (e.g., "AAPL"), price (double), point (int from 5 to 510)
+     * Formats: ticker, price (double), point (int from 5 to 510)
      */
     public void updatePriceData(String ticker, double price, int point) {
         handlePricePacket(ticker, price, point, "PRICE_UPDATE|" + ticker + "|" + price + "|" + point);
@@ -312,13 +312,6 @@ public class GameUIController {
                 updateYAxis(price);
             }
 
-            // Update labels
-            if (labelDay != null) {
-                labelDay.setText("Tickers: " + String.join(" | ", tickerOrder));
-            }
-            if (labelTime != null) {
-                labelTime.setText("Current ticker: " + displayTicker + " price: £" + String.format("%.2f", price));
-            }
             // Update debug info at bottom right (not cash/networth)
             if (lblDebugInfo != null) {
                 lblDebugInfo.setText("Price: £" + String.format("%.2f", price) + " | Points: " + series.getData().size());
@@ -342,7 +335,7 @@ public class GameUIController {
             aiSeries.getData().add(new XYChart.Data<>((double) time, price));
 
             if (displayTicker.equals(currentTicker) && ChartAI != null) {
-                // This avoids stale chart references after screen/ticker switches.
+                // This avoids stale old chart references after screen/ticker switches.
                 XYChart.Series<Number, Number> renderSeries = new XYChart.Series<>();
                 renderSeries.setName(displayTicker + " AI");
                 renderSeries.getData().addAll(aiSeries.getData());
@@ -352,8 +345,7 @@ public class GameUIController {
                 updateAIYAxis(price);
 
                 if (labelNetWorth != null) {
-                    labelNetWorth.setText("Points: " + tickerSeries.getOrDefault(displayTicker, new XYChart.Series<>()).getData().size()
-                        + " | AI: " + aiSeries.getData().size());
+                    labelNetWorth.setText("Points: " + tickerSeries.getOrDefault(displayTicker, new XYChart.Series<>()).getData().size()+ " | AI: " + aiSeries.getData().size());
                 }
             }
         });
@@ -466,7 +458,7 @@ public class GameUIController {
     }
 
     /**
-     * Trim a data series to prevent unbounded memory growth.
+     * Trim data to prevent unbounded memory growth.
      * 
      * Removes oldest data points from the series when it exceeds MAX_POINTS.
      * This keeps the chart responsive and memory usage bounded during long play sessions.
@@ -523,6 +515,8 @@ public class GameUIController {
     private void addAITradeMarker(String ticker, int pointIndex, double price, boolean isBuy) {
         Map<String, List<XYChart.Series<Number, Number>>> markerMap = isBuy ? aiBuyMarkers : aiSellMarkers;
 
+
+        //Manually add FX nodes and the css style, this is because the AI chart gets completely redrawn every time it receives a new packet and we need the markers to persist through that
         XYChart.Data<Number, Number> markerPoint = new XYChart.Data<>(pointIndex, price);
 
         markerPoint.nodeProperty().addListener((obs, oldNode, newNode) -> {
@@ -575,7 +569,7 @@ public class GameUIController {
         ChartAI.setTitle("Live Price Feed - " + ticker);
     }
 
-    // show coffee powerup countdown timer in UI
+    // show coffee powerup countdown timer in UI (keeps getting overwritten by the price update label)
     public void showPowerupTimer(String name, long durationMs) {
         long endTime = System.currentTimeMillis() + durationMs;
         Thread timerThread = new Thread(() -> {
@@ -604,10 +598,7 @@ public class GameUIController {
         timerThread.start();
     }
 
-    /**
-     * Update portfolio display with cash and holdings
-     * Format: PORTFOLIO_UPDATE|cash|ticker1:qty1:price1|ticker2:qty2:price2|...
-     */
+
     /**
      * Update portfolio with latest prices from price updates
      */
@@ -659,12 +650,8 @@ public class GameUIController {
                         double price = entry.currentPrice > 0 ? entry.currentPrice : lastPricePerTicker.getOrDefault(entry.ticker, 0.0);
                         
                         if (currentQty > previousQty) {
-                            // BUY detected
-                            System.out.println("TRADE DETECTED: BUY " + entry.ticker + " (+" + (currentQty - previousQty) + ") at £" + price);
                             addPlayerTradeMarker(entry.ticker, currentPointIndex, price, true);
                         } else if (currentQty < previousQty) {
-                            // SELL detected
-                            System.out.println("TRADE DETECTED: SELL " + entry.ticker + " (-" + (previousQty - currentQty) + ") at £" + price);
                             addPlayerTradeMarker(entry.ticker, currentPointIndex, price, false);
                         }
                         
@@ -732,12 +719,9 @@ public class GameUIController {
                         double price = entry.currentPrice > 0 ? entry.currentPrice : lastPricePerTicker.getOrDefault(entry.ticker, 0.0);
                         
                         if (currentQty > previousQty) {
-                            // AI BUY detected
-                            System.out.println("AI TRADE DETECTED: BUY " + entry.ticker + " (+" + (currentQty - previousQty) + ") at £" + price);
                             addAITradeMarker(entry.ticker, currentPointIndex, price, true);
                         } else if (currentQty < previousQty) {
                             // AI SELL detected
-                            System.out.println("AI TRADE DETECTED: SELL " + entry.ticker + " (-" + (previousQty - currentQty) + ") at £" + price);
                             addAITradeMarker(entry.ticker, currentPointIndex, price, false);
                         }
                         
@@ -818,7 +802,7 @@ public class GameUIController {
         int quantity;
         
         if ("max".equals(qtyStr)) {
-            // Get current holding from table
+            //Get current holding from table
             int maxHolding = 0;
             for (PortfolioItem item : tableHoldings.getItems()) {
                 if (item.ticker.equals(ticker)) {

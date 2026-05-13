@@ -58,25 +58,7 @@
          "draworder":"topdown",
          "id":6,
          "name":"Interactables",
-         "objects":[
-                {
-                 "height":0,
-                 "id":3,
-                 "name":"",
-                 "point":true,
-                 "properties":[
-                        {
-                         "name":"barista",
-                         "type":"string",
-                         "value":""
-                        }],
-                 "rotation":0,
-                 "type":"",
-                 "visible":true,
-                 "width":0,
-                 "x":219.333333333333,
-                 "y":187.166666666667
-                }],
+         "objects":[],
          "opacity":1,
          "type":"objectgroup",
          "visible":false,
@@ -165,7 +147,7 @@
                         {
                          "name":"message",
                          "type":"string",
-                         "value":"Welcome! Want to try our pixel-brew? It's 8-bit strong"
+                         "value":"Welcome! Want to try our coffee, i'll make you a cup!"
                         }, 
                         {
                          "name":"name",
@@ -185,7 +167,7 @@
                         {
                          "name":"thankYouMessage",
                          "type":"string",
-                         "value":"Enjoy!"
+                         "value":"Only 1 cup per day!"
                         }, 
                         {
                          "name":"type ",

@@ -167,7 +167,7 @@ public class client extends Application {
             }
             System.out.println("Listening thread: connection closed by server");
         } catch (IOException e) {
-            if (connected) {  // Only log if we didn't intentionally disconnect
+            if (connected) {
                 System.err.println("Connection lost: " + e.getMessage());
                 Platform.runLater(() -> showErrorDialog("Lost connection to server"));
             }
@@ -183,11 +183,6 @@ public class client extends Application {
         }
     }
 
-    /**
-     * Parse and handle packets from server
-     * Packet format: TYPE|data1|data2|...
-     * Packets are disected by | and the first arg determines the type, the rest are agrv similar
-     */
     private void handlePacket(String packet) {
          if(packet == null || packet.isEmpty()){
             return;
@@ -465,7 +460,6 @@ public class client extends Application {
      * This is called after BUYS/SELLS to update the UI with the msot up to date data
      * @param parts
      */    private void handlePortfolioUpdate(String[] parts) {
-        // Format: PORTFOLIO_UPDATE|cash|ticker1:qty1:price1|ticker2:qty2:price2|
         // Consider shortening the packets or use bytes.
         if (parts.length < 2) return;
         String cash = parts[1];
