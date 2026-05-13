@@ -109,7 +109,7 @@ public class DBHandler {
                     "action VARCHAR(10) NOT NULL," +
                     "stock_id INTEGER," +
                     "quantity INTEGER," +
-                    "price DECIMAL(12,2)," +
+                    "price DECIMAL(12,2)," + //(12,2) truncates to 2DP so parseDouble works without issues. (12digits+ 2 decimalsis 14 digits) 999 billion which is overkill but allows room for safety
                     "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP," +
                     "FOREIGN KEY(user_id) REFERENCES users(user_id) ON DELETE CASCADE," +
                     "FOREIGN KEY(game_id) REFERENCES games(game_id) ON DELETE CASCADE," +
@@ -151,11 +151,14 @@ public class DBHandler {
     }
 
     /**
-     * Hash password using SHA-256 (NOT AES-256)
+     * Hash password using SHA-256 (NOT AES-256/ we included AES-256 in the proposal this was a miscommunicaiton)
      */
     private String hashPassword(String password) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            //Need to add a salt
+            String salt = "COMP208SALT";
+            password = password + salt;
             byte[] hash = digest.digest(password.getBytes(StandardCharsets.UTF_8));
             StringBuilder hexString = new StringBuilder();
             for (byte b : hash) {
@@ -728,6 +731,65 @@ public class DBHandler {
             }
         } catch (SQLException e) {
             System.err.println("Error updating AI holding: " + e.getMessage());
+        }
+        return false;
+    }
+
+    /**
+     * Get inventory item count for a game
+     */
+    public int getInventoryItem(int gameId, String itemName) {
+        try (Connection conn = getConnection()) {
+            String query = "SELECT quantity FROM inventory WHERE game_id = ? AND item_name = ?";
+            try (PreparedStatement pstmt = conn.prepareStatement(query)) {
+                pstmt.setInt(1, gameId);
+                pstmt.setString(2, itemName);
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    if (rs.next()) {
+                        return rs.getInt("quantity");
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Error fetching inventory item: " + e.getMessage());
+        }
+        return 0;
+    }
+
+    /**
+     * Update inventory item quantity for a game
+     */
+    public boolean updateInventoryItem(int gameId, String itemName, int quantity) {
+        try (Connection conn = getConnection()) {
+            // First check if record exists
+            String checkQuery = "SELECT id FROM inventory WHERE game_id = ? AND item_name = ?";
+            try (PreparedStatement checkStmt = conn.prepareStatement(checkQuery)) {
+                checkStmt.setInt(1, gameId);
+                checkStmt.setString(2, itemName);
+                try (ResultSet rs = checkStmt.executeQuery()) {
+                    if (rs.next()) {
+                        // Update existing record
+                        String updateQuery = "UPDATE inventory SET quantity = ? WHERE game_id = ? AND item_name = ?";
+                        try (PreparedStatement updateStmt = conn.prepareStatement(updateQuery)) {
+                            updateStmt.setInt(1, quantity);
+                            updateStmt.setInt(2, gameId);
+                            updateStmt.setString(3, itemName);
+                            return updateStmt.executeUpdate() > 0;
+                        }
+                    } else {
+                        // Insert new record
+                        String insertQuery = "INSERT INTO inventory (game_id, item_name, quantity) VALUES (?, ?, ?)";
+                        try (PreparedStatement insertStmt = conn.prepareStatement(insertQuery)) {
+                            insertStmt.setInt(1, gameId);
+                            insertStmt.setString(2, itemName);
+                            insertStmt.setInt(3, quantity);
+                            return insertStmt.executeUpdate() > 0;
+                        }
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Error updating inventory item: " + e.getMessage());
         }
         return false;
     }

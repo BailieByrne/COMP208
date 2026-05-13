@@ -128,17 +128,6 @@ public class MainMenuController {
         }
     }
 
-
-    //TODO sends the powerup requestt
-    @FXML
-    private void onTriggerCoffeePowerup() {
-        client.getInstance().requestPowerup("coffee");
-        if (statusLabel != null) {
-            statusLabel.setText("Requested coffee powerup");
-        }
-    }
-
-
     /**
      * Handles exit
      * @return void

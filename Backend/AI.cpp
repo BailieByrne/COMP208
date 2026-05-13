@@ -19,13 +19,6 @@
  * IMPORTANT: Remove the logic from the constructor to avoid heavy computation
  */
 AI::AI(double S0, double mu, double sigma, double sentiment, std::string ticker, int difficulty, std::uint64_t seedBase) {
-        /**
-        AI will be passed the params to run monte carlo sim
-        //Dependant on its difficulty is how many fixed points it will know.
-        //The AI will then predict its own graph an optimise for the greatest deltas for price gain
-        //OPTIONAL: Add a holding system if the price is relativley low towards the end of the day, it will hold and wait for a price increase.
-        **/
-
         //Local Class var declarations.
         //Here we are going to skew by +- 5% to make the AI less accurate,
         //This is a choice however this will break the reproducibility of the AI, so I will add a seed based random generator to generate the skew values so at least the same seed will produce the same results even with the skew.

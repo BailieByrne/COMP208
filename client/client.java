@@ -26,6 +26,14 @@ public class client extends Application {
     private int activeGameDifficulty = 1;
     private int activeGameDay = 1;
     private boolean loginPending = false;
+    
+    // Persistent inventory state across all controllers
+    private int coffeeCount = 0;
+    
+    // Server connection parameters
+    private String serverIP = "localhost";
+    private int serverPort = 5000;
+    private boolean connectionInitialized = false;
 
     @Override
     public void start(Stage stage) {
@@ -33,10 +41,7 @@ public class client extends Application {
         primaryStage = stage;
         primaryStage.setTitle("Project Belford");
 
-        // Connect to server
-        connectToServer();
-
-        // Show login screen
+        // Show login screen - user must configure connection first
         showLoginScreen();
     }
 
@@ -65,7 +70,7 @@ public class client extends Application {
                 // Make fullscreen and bring to top
                 primaryStage.setFullScreen(true);
                 primaryStage.setAlwaysOnTop(false);
-                primaryStage.setFullScreenExitHint("");
+                primaryStage.setFullScreenExitHint(""); //This was annoying thus hidden
                 primaryStage.show();
                 primaryStage.toFront();
                 primaryStage.requestFocus();
@@ -81,25 +86,72 @@ public class client extends Application {
     }
 
     /**
-     * Connect to server at localhost:5000 and start packet listener
+     * Connect to server and start packet listener
      */
     private void connectToServer() {
         new Thread(() -> {
             try {
-                //As of now use localhost, plans to move this to online hosting in the future
-                socket = new Socket("localhost", 5000);
+                socket = new Socket(serverIP, serverPort);
+                socket.setKeepAlive(true);  // Enable TCP keep-alive
+                socket.setTcpNoDelay(true); // Disable Nagle's algorithm for faster response
+                
                 out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
                 in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
                 connected = true;
-                System.out.println("Connected to server at localhost:5000");
+                System.out.println("Connected to server at " + serverIP + ":" + serverPort);
 
                 // Start listening for packets
                 listenForPackets();
             } catch (IOException e) {
                 System.err.println("Failed to connect to server: " + e.getMessage());
-                Platform.runLater(() -> showErrorDialog("Cannot connect to server at localhost:5000"));
+                connected = false;
+                Platform.runLater(() -> showErrorDialog("Cannot connect to server at " + serverIP + ":" + serverPort));
             }
         }).start();
+    }
+    
+    /**
+     * Set server connection parameters and reconnect to new server if IP/port changed
+     */
+    public void setServerConnection(String ip, int port) {
+        // Only reconnect if the IP/port actually changed OR we haven't connected yet
+        if (connectionInitialized && this.serverIP.equals(ip) && this.serverPort == port) {
+            System.out.println("Server connection already set to: " + ip + ":" + port);
+            return;
+        }
+        
+        this.serverIP = ip;
+        this.serverPort = port;
+        connectionInitialized = true;
+        System.out.println("Server connection configured: " + ip + ":" + port);
+        
+        // Disconnect from old connection if exists
+        disconnectFromServer();
+        
+        // Connect to new server
+        connectToServer();
+    }
+    
+    /**
+     * Disconnect from current server
+     */
+    private void disconnectFromServer() {
+        if (socket != null) {
+            try {
+                connected = false;
+                socket.close();
+                System.out.println("Disconnected from previous server");
+            } catch (IOException e) {
+                System.err.println("Error disconnecting: " + e.getMessage());
+            }
+        }
+    }
+    
+    /**
+     * Check if client is connected to server
+     */
+    public boolean isConnected() {
+        return connected && socket != null && socket.isConnected();
     }
 
     /**
@@ -109,17 +161,25 @@ public class client extends Application {
         try {
             String packet;
             while ((packet = in.readLine()) != null) {
-                handlePacket(packet);
+                if (!packet.isEmpty()) {
+                    handlePacket(packet);
+                }
             }
+            System.out.println("Listening thread: connection closed by server");
         } catch (IOException e) {
-            System.err.println("Connection lost: " + e.getMessage());
-            Platform.runLater(() -> showErrorDialog("Lost connection to server"));
+            if (connected) {  // Only log if we didn't intentionally disconnect
+                System.err.println("Connection lost: " + e.getMessage());
+                Platform.runLater(() -> showErrorDialog("Lost connection to server"));
+            }
         } finally {
             connected = false;
             try {
-                socket.close();
+                if (socket != null && !socket.isClosed()) {
+                    socket.close();
+                }
             } catch (IOException ignored) {
             }
+            System.out.println("Listening thread exited");
         }
     }
 
@@ -202,6 +262,9 @@ public class client extends Application {
                     break;
                 case "AI_PORTFOLIO_UPDATE":
                     handleAIPortfolioUpdate(parts);
+                    break;
+                case "POWERUP":
+                    handlePowerup(parts);
                     break;
                 case "GAME_DATA":
                     handleGameData(parts);
@@ -402,7 +465,8 @@ public class client extends Application {
      * This is called after BUYS/SELLS to update the UI with the msot up to date data
      * @param parts
      */    private void handlePortfolioUpdate(String[] parts) {
-        // Format: PORTFOLIO_UPDATE|cash|ticker1:qty1:price1|ticker2:qty2:price2|...
+        // Format: PORTFOLIO_UPDATE|cash|ticker1:qty1:price1|ticker2:qty2:price2|
+        // Consider shortening the packets or use bytes.
         if (parts.length < 2) return;
         String cash = parts[1];
         
@@ -421,7 +485,7 @@ public class client extends Application {
             }
         }
         
-        // Update the GameUIController if it's active
+        // Update the GameUIController and push the updatepportfolio to runLater
         if (currentController instanceof GameUIController) {
             GameUIController controller = (GameUIController) currentController;
             Platform.runLater(() -> controller.updatePortfolio(cash, holdings));
@@ -430,11 +494,10 @@ public class client extends Application {
 
     /**
      * Handles AI portfolio updates from the server
-     * Format: AI_PORTFOLIO_UPDATE|cash|ticker1:qty1:price1|ticker2:qty2:price2|...
+     * Format already defined
      * @param parts
      */
     private void handleAIPortfolioUpdate(String[] parts) {
-        // Format: AI_PORTFOLIO_UPDATE|cash|ticker1:qty1:price1|ticker2:qty2:price2|...
         if (parts.length < 2) return;
         String aiCash = parts[1];
         
@@ -452,7 +515,7 @@ public class client extends Application {
             }
         }
         
-        // Update the GameUIController if it's active
+        // Update the GameUIController if its active
         if (currentController instanceof GameUIController) {
             GameUIController controller = (GameUIController) currentController;
             Platform.runLater(() -> controller.updateAIPortfolio(aiCash, aiHoldings));
@@ -471,6 +534,10 @@ public class client extends Application {
         Platform.runLater(this::showMainMenuScreen);
     }
 
+    /**
+     * TODO: HANDLE A major overhaul of this rather than just a simple console output.
+     * @param parts
+     */
     private void handleGameOver(String[] parts) {
         // Format: GAME_OVER|result|playerNetWorth|aiNetWorth
         String result = parts.length > 1 ? parts[1] : "UNKNOWN";
@@ -487,11 +554,50 @@ public class client extends Application {
         Platform.runLater(() -> showErrorDialog(errorMsg));
     }
 
+    private void handlePowerup(String[] parts) {
+        if (parts.length < 3) return;
+        String powerupType = parts[1];
+        String action = parts[2];
+        
+        if ("coffee".equalsIgnoreCase(powerupType)) {
+            if ("acquired".equalsIgnoreCase(action) && parts.length >= 4) {
+                // From barista: POWERUP|coffee|acquired|count
+                int count = Integer.parseInt(parts[3]);
+                coffeeCount = count;  // Store globally
+                System.out.println("Coffee acquired: count=" + count);
+                Platform.runLater(() -> {
+                    if (currentController instanceof GameUIController) {
+                        GameUIController controller = (GameUIController) currentController;
+                        controller.updateCoffeeCount(count);
+                    }
+                });
+                
+            } else if ("activated".equalsIgnoreCase(action) && parts.length >= 5) {
+                // Used coffee: POWERUP|coffee|activated|count|durationMs
+                int count = Integer.parseInt(parts[3]);
+                coffeeCount = count;  // Store globally
+                long durationMs = Long.parseLong(parts[4]);
+                System.out.println("Coffee activated: count=" + count + ", duration=" + durationMs + "ms");
+                Platform.runLater(() -> {
+                    if (currentController instanceof GameUIController) {
+                        GameUIController controller = (GameUIController) currentController;
+                        controller.updateCoffeeCount(count);
+                        controller.showPowerupTimer("coffee", durationMs);
+                    }
+                });
+            }
+        }
+    }
+
     // ==================== Public API Methods ====================
     //These should be mostly self explanatory.
 
     public static client getInstance() {
         return instance;
+    }
+
+    public int getCoffeeCount() {
+        return coffeeCount;
     }
 
     public void requestLogin(String username, String password) {
@@ -552,8 +658,25 @@ public class client extends Application {
 
     public void requestPowerup(String powerupName) {
         if (!connected) {
-            showErrorDialog("Not connected to server");
-            return;
+            System.out.println("Not connected to server, attempting to reconnect...");
+            // Try to reconnect with current IP/port
+            connectToServer();
+            
+            // Wait briefly for connection to establish
+            for (int i = 0; i < 20; i++) {
+                try {
+                    Thread.sleep(50);
+                    if (connected) {
+                        System.out.println("Reconnection successful");
+                        break;
+                    }
+                } catch (InterruptedException ignored) {}
+            }
+            
+            if (!connected) {
+                showErrorDialog("Not connected to server");
+                return;
+            }
         }
         sendPacket("POWERUP|" + powerupName);
     }
@@ -565,45 +688,69 @@ public class client extends Application {
 
     public void requestBuy(String ticker, int quantity, double price) {
         if (!connected) {
-            showErrorDialog("Not connected to server");
-            return;
+            System.out.println("Not connected to server, attempting to reconnect...");
+            connectToServer();
+            for (int i = 0; i < 20; i++) {
+                try { Thread.sleep(50);
+                    if (connected) break;
+                } catch (InterruptedException ignored) {}
+            }
+            if (!connected) {
+                showErrorDialog("Not connected to server");
+                return;
+            }
         }
         sendPacket("BUY|" + ticker + "|" + quantity + "|" + price);
     }
 
     public void requestSell(String ticker, int quantity, double price) {
         if (!connected) {
-            showErrorDialog("Not connected to server");
-            return;
+            System.out.println("Not connected to server, attempting to reconnect...");
+            connectToServer();
+            for (int i = 0; i < 20; i++) {
+                try { Thread.sleep(50);
+                    if (connected) break;
+                } catch (InterruptedException ignored) {}
+            }
+            if (!connected) {
+                showErrorDialog("Not connected to server");
+                return;
+            }
         }
         sendPacket("SELL|" + ticker + "|" + quantity + "|" + price);
     }
 
     public void requestSellAll(String ticker, double price) {
         if (!connected) {
-            showErrorDialog("Not connected to server");
-            return;
+            System.out.println("Not connected to server, attempting to reconnect...");
+            connectToServer();
+            for (int i = 0; i < 20; i++) {
+                try { Thread.sleep(50);
+                    if (connected) break;
+                } catch (InterruptedException ignored) {}
+            }
+            if (!connected) {
+                showErrorDialog("Not connected to server");
+                return;
+            }
         }
         sendPacket("SELL_ALL|" + ticker + "|" + price);
     }
-    // ==================== Helper Methods ====================
-    // I'll work on sending the packets - radu
-    
+
+    public void useCoffee() {
+        requestPowerup("coffee|activate");
+    }
+
     private int calculateCheckSum(String data){
         int sum = 0;
         for(char c : data.toCharArray()){
             sum += (int) c;
         }
+        sum = sum % 256; // Stops overflow errors
         return sum;
     }
 
     private void sendPacket(String packet) {
-        /**String -> bytes[] 
-         * Turn to bytes[]
-         * - Add a checksum
-         * - then send it
-         * USe UTF8 for this @LEO + @RADU
-         */
         if (out != null && connected) {
             try{
                 int checksum = calculateCheckSum(packet);
@@ -642,7 +789,7 @@ public class client extends Application {
     }
 
     private void showGameOverDialog(String result, String playerNetWorth, String aiNetWorth) {
-        // Simple console output for now - can be extended to show actual dialog with results
+        //Again the simple GameOverDialog
         System.out.println("====== GAME OVER ======");
         System.out.println("Result: " + result);
         System.out.println("Player Net Worth: £" + playerNetWorth);

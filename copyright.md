@@ -30,13 +30,13 @@ SQLite JDBC
 Link {https://github.com/xerial/sqlite-jdbc}
 Author {Xerial Project}
 Version {3.46.0.0}
-Description {SQLite JDBC driver for Java database connectivity}
+Description {SQLite JDBC driver for Java db connections}
 
 SLF4J (Simple Logging Facade for Java)
 Link {https://www.slf4j.org/}
 Author {QOS.ch}
 Version {2.0.13}
-Decsription {Logging framework for Java applications)
+Decsription {Logging framework for Java applications}
 
 Jackson (JSON processing library)
 Link {https://github.com/FasterXML/jackson}

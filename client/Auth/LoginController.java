@@ -7,6 +7,8 @@ import javafx.scene.control.TextField;
 public class LoginController {
     @FXML private TextField usernameField;
     @FXML private PasswordField passwordField;
+    @FXML private TextField ipField;
+    @FXML private TextField portField;
     @FXML private Label statusLabel;
 
     @FXML
@@ -17,8 +19,55 @@ public class LoginController {
             setStatus("Enter username and password");
             return;
         }
-        setStatus("Connecting...");
-        client.getInstance().requestLogin(username, password);
+        
+        setStatus("Configuring server connection...");
+        configureConnection();
+        
+        // Wait for connection to be established before logging in
+        new Thread(() -> {
+            try {
+                // Wait up to 3 seconds for connection
+                for (int i = 0; i < 30; i++) {
+                    if (client.getInstance().isConnected()) {
+                        System.out.println("Server connection established");
+                        javafx.application.Platform.runLater(() -> {
+                            setStatus("Logging in...");
+                            client.getInstance().requestLogin(username, password);
+                        });
+                        return;
+                    }
+                    Thread.sleep(100);
+                }
+                // Connection failed after timeout
+                javafx.application.Platform.runLater(() -> {
+                    setStatus("Failed to connect to server. Check IP and port.");
+                });
+            } catch (InterruptedException e) {
+                javafx.application.Platform.runLater(() -> setStatus("Connection interrupted"));
+            }
+        }).start();
+    }
+    
+    private void configureConnection() {
+        String ip = "localhost";
+        int port = 5000;
+        
+        // Get IP from field if provided
+        if (ipField != null && ipField.getText() != null && !ipField.getText().trim().isEmpty()) {
+            ip = ipField.getText().trim();
+        }
+        
+        // Get port from field if provided
+        if (portField != null && portField.getText() != null && !portField.getText().trim().isEmpty()) {
+            try {
+                port = Integer.parseInt(portField.getText().trim());
+            } catch (NumberFormatException e) {
+                setStatus("Invalid port number, using default 5000");
+                port = 5000;
+            }
+        }
+        
+        client.getInstance().setServerConnection(ip, port);
     }
 
     public void setStatus(String text) {
@@ -35,7 +84,32 @@ public class LoginController {
             setStatus("Enter username and password");
             return;
         }
-        setStatus("Creating account...");
-        client.getInstance().requestSignup(username, password);
+        
+        setStatus("Configuring server connection...");
+        configureConnection();
+        
+        // Wait for connection to be established before signing up
+        new Thread(() -> {
+            try {
+                // Wait up to 3 seconds for connection
+                for (int i = 0; i < 30; i++) {
+                    if (client.getInstance().isConnected()) {
+                        System.out.println("Server connection established");
+                        javafx.application.Platform.runLater(() -> {
+                            setStatus("Creating account...");
+                            client.getInstance().requestSignup(username, password);
+                        });
+                        return;
+                    }
+                    Thread.sleep(100);
+                }
+                // Connection failed after timeout
+                javafx.application.Platform.runLater(() -> {
+                    setStatus("Failed to connect to server. Check IP and port.");
+                });
+            } catch (InterruptedException e) {
+                javafx.application.Platform.runLater(() -> setStatus("Connection interrupted"));
+            }
+        }).start();
     }
 }

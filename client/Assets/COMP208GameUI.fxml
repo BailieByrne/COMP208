@@ -212,6 +212,11 @@
                         <Font size="25.0" />
                      </font>
                   </Button>
+                  <Button fx:id="btnUseCoffee" mnemonicParsing="false" onAction="#onUseCoffee" text="Use Coffee (0)">
+                     <font>
+                        <Font size="25.0" />
+                     </font>
+                  </Button>
                </children>
             </HBox>
             <HBox alignment="BOTTOM_RIGHT" prefHeight="30.0" prefWidth="200.0">

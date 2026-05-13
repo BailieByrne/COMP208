@@ -285,11 +285,11 @@ public class GameTest extends JPanel implements ActionListener, KeyListener {
                 if (!hasCoffee) {
                     JOptionPane.showMessageDialog(this, activeObject.message); // show barista message
                     hasCoffee = true; // player got the coffee!
-                    // TODO: Send to db that we have coffee
+                    // Send powerup acquire packet to server
+                    System.out.println("Requesting coffee acquisition...");
+                    System.out.println("Client connected: " + client.getInstance().isConnected());
+                    client.getInstance().requestPowerup("coffee|acquire");
 
-                    // if (hasCoffee){
-                    //     System.out.println("hasCoffee == TRUE"); // debug: confirm flag
-                    // }
                     if (activeObject.altSprite != null) activeObject.sprite = activeObject.altSprite; // swap barista sprite
                 } else {
                     JOptionPane.showMessageDialog(this, activeObject.thankYouMessage); // already have coffee message

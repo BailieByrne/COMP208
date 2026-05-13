@@ -41,6 +41,7 @@ public class GameUIController {
     @FXML private javafx.scene.control.Button btnBuy;
     @FXML private javafx.scene.control.Button btnSell;
     @FXML private javafx.scene.control.Button btnSellAll;
+    @FXML private javafx.scene.control.Button btnUseCoffee;
     @FXML private Label lblDebugInfo;
 
     // Support multiple tickers
@@ -48,6 +49,7 @@ public class GameUIController {
     private final Map<String, XYChart.Series<Number, Number>> aiTickerSeries = new HashMap<>();
     private final Map<String, Double> lastPricePerTicker = new java.util.concurrent.ConcurrentHashMap<>();
     private final List<String> tickerOrder = new ArrayList<>();
+    private int coffeeCount = 0;  // Track coffee inventory
     private String currentTicker = null;
     private double highestPriceSeen = 0.0;
     private double highestAIPriceSeen = 0.0;
@@ -181,6 +183,9 @@ public class GameUIController {
 
         // Initialize table with all available stocks at 0 quantity
         initializeStocksTable();
+        
+        // Load persisted coffee count from client
+        updateCoffeeCount(client.getInstance().getCoffeeCount());
     }
 
     private void initializeStocksTable() {
@@ -845,6 +850,28 @@ public class GameUIController {
         
         // Send SELL_ALL packet to server: SELL_ALL|ticker|price
         client.getInstance().requestSellAll(ticker, currentPrice);
+    }
+
+    @FXML
+    private void onUseCoffee() {
+        if (coffeeCount <= 0) {
+            labelTime.setText("No coffee available!");
+            return;
+        }
+        
+        // Send USE_COFFEE packet to server
+        client.getInstance().useCoffee();
+        labelTime.setText("Using coffee...");
+    }
+
+    public void updateCoffeeCount(int count) {
+        runOnFxThread(() -> {
+            coffeeCount = count;
+            if (btnUseCoffee != null) {
+                btnUseCoffee.setText("Use Coffee (" + count + ")");
+                btnUseCoffee.setDisable(count <= 0);
+            }
+        });
     }
 
     /**

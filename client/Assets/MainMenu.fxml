@@ -18,6 +18,25 @@
             <Font size="36.0" />
          </font>
       </Label>
+      <VBox spacing="10.0" style="-fx-border-color: #4CAF50; -fx-border-width: 2; -fx-padding: 15; -fx-border-radius: 5;" prefWidth="600.0" maxWidth="600.0">
+         <children>
+            <Label text="Welcome to Project Belford!" style="-fx-font-weight: bold; -fx-text-fill: #4CAF50;">
+               <font>
+                  <Font size="14.0" />
+               </font>
+            </Label>
+            <Label text="Instructions:" style="-fx-font-weight: bold;">
+               <font>
+                  <Font size="12.0" />
+               </font>
+            </Label>
+            <Label wrapText="true" text="• Trade stocks across 5 days to beat the AI opponent&#10;• Each day you unlock a new stock ticker&#10;• Cycle 1: Trading phase with live price updates&#10;• Cycle 2: Mini-game in a coffee shop RPG&#10;• Talk to the barista to get a coffee powerup!&#10;• Use Coffee in Cycle 1 to speed up trading for 10 seconds&#10;• The player with the highest cash at the end wins!">
+               <font>
+                  <Font size="11.0" />
+               </font>
+            </Label>
+         </children>
+      </VBox>
       <HBox fx:id="difficultyBox" alignment="CENTER" spacing="12.0" prefHeight="50.0">
          <children>
             <Label text="Difficulty:" prefHeight="30.0">
@@ -30,7 +49,6 @@
       </HBox>
       <Button fx:id="resumeGameButton" mnemonicParsing="false" onAction="#onResumeGame" prefHeight="46.0" prefWidth="240.0" text="Resume Game" />
       <Button fx:id="startCycle1Button" mnemonicParsing="false" onAction="#onStartCycle1" prefHeight="46.0" prefWidth="240.0" text="Start Game" />
-      <Button fx:id="triggerCoffeeButton" mnemonicParsing="false" onAction="#onTriggerCoffeePowerup" prefHeight="46.0" prefWidth="240.0" text="Use Coffee Powerup" />
       <Button fx:id="exitButton" mnemonicParsing="false" onAction="#onExit" prefHeight="46.0" prefWidth="240.0" text="Exit" />
       <Label fx:id="statusLabel" text="Ready" />
    </children>
